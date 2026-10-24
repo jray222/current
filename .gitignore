@@ -1,0 +1,15 @@
+*.db
+*.db-journal
+*.log
+backend/data/
+backend/venv/
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+
+# Personal AI-tooling config, not part of the app
+.opencode/

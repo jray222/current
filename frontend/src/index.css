@@ -1,0 +1,118 @@
+@import '@fontsource-variable/fraunces';
+@import '@fontsource-variable/nunito-sans';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Neutral tokens as space-separated RGB so Tailwind can add opacity (bg-cream/80). */
+:root {
+  color-scheme: light;
+  --cream: 246 244 239;
+  --surface: 255 255 255;
+  --sunk: 236 234 227;
+  --ink: 26 33 33;
+  --muted: 96 106 104;
+  --line: 222 219 210;
+}
+
+html.dark {
+  color-scheme: dark;
+  --cream: 17 20 21;
+  --surface: 29 33 34;
+  --sunk: 41 46 47;
+  --ink: 238 241 238;
+  --muted: 160 170 167;
+  --line: 56 62 63;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    @apply bg-cream text-ink font-sans antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display font-semibold tracking-tight;
+  }
+  :where(button, a, select, summary, [role='tab'], [role='radio'], [tabindex]):focus-visible,
+  :where(input, textarea):focus-visible {
+    outline: 3px solid rgb(59 185 169 / 0.7);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Cards */
+  .card { @apply bg-surface rounded-3xl shadow-soft border border-line/60; }
+  .card-pad { @apply p-5 sm:p-6; }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold
+      transition active:scale-[0.97] disabled:opacity-50 disabled:pointer-events-none cursor-pointer select-none;
+  }
+  .btn-primary { @apply btn bg-brand-600 text-white shadow-pop hover:bg-brand-700; }
+  .btn-green { @apply btn bg-moss-600 text-white hover:bg-moss-700; }
+  .btn-soft { @apply btn bg-sunk text-ink hover:bg-line; }
+  .btn-ghost { @apply btn text-muted hover:bg-sunk hover:text-ink; }
+  .btn-danger { @apply btn bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-900/40 dark:text-brand-200; }
+  .btn-icon { @apply inline-flex items-center justify-center w-10 h-10 rounded-full transition cursor-pointer active:scale-95; }
+
+  /* Form fields */
+  .input {
+    @apply w-full bg-surface text-ink placeholder:text-muted/70 border-2 border-line rounded-2xl px-4 py-2.5
+      transition focus:border-brand-400 focus:outline-none;
+  }
+  .label { @apply block text-xs font-bold text-muted mb-1.5 uppercase tracking-wide; }
+
+  /* Chips: tags, filters, status */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold bg-sunk text-muted
+      transition cursor-pointer select-none whitespace-nowrap;
+  }
+  .chip-on { @apply bg-brand-600 text-white; }
+  .chip-moss { @apply bg-moss-100 text-moss-800 dark:bg-moss-900/60 dark:text-moss-200; }
+  .chip-amber { @apply bg-amber-100 text-amber-700 dark:bg-amber-600/20 dark:text-amber-300; }
+
+  /* Banners */
+  .banner-error { @apply flex items-start gap-2 rounded-2xl bg-brand-50 text-brand-800 p-3 text-sm dark:bg-brand-900/40 dark:text-brand-100; }
+  .banner-ok { @apply flex items-start gap-2 rounded-2xl bg-moss-50 text-moss-800 p-3 text-sm dark:bg-moss-900/50 dark:text-moss-100; }
+  .banner-warn { @apply flex items-start gap-2 rounded-2xl bg-amber-50 text-amber-700 p-3 text-sm dark:bg-amber-600/15 dark:text-amber-200; }
+}
+
+/* iOS zooms the page when focusing an input under 16px. */
+@media (max-width: 1023px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Room for the fixed bottom tab bar (plus the iPhone home indicator). */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+
+/* Hide the horizontal scrollbar of chip rows but keep them swipeable. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@keyframes sheet-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.sheet-in { animation: sheet-up 180ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-in, .fade-in { animation: none; }
+  .btn { transition: none; }
+}
+
+/* Sail and quiz: a picture fading in, and the auto-advance bar. */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in 220ms ease-out; }
+@keyframes timer-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.timer-fill { transform-origin: left; animation: timer-fill linear forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .timer-fill { animation: none; transform: scaleX(1); opacity: 0.5; }
+}

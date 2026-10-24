@@ -1,0 +1,23 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+sqlalchemy>=2.0.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+python-dotenv>=1.0.0
+# Wikimedia Commons, Wikipedia and iNaturalist (services/sources.py)
+httpx>=0.27.0
+# Claude drafts new decks from a topic; optional at runtime
+anthropic>=1.0.0
+# The time zone database for zoneinfo on machines whose OS has none, such as
+# Windows. The Docker base image ships the OS one.
+tzdata>=2024.1
+
+# Authentication & Security (Login + TOTP 2FA)
+bcrypt>=4.1.0
+pyjwt>=2.8.0
+pyotp>=2.9.0
+qrcode[pil]>=7.4.2
+cryptography>=44.0.0
+
+# Resizing collected pictures
+pillow>=10.3.0

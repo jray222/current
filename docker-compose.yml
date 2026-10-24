@@ -1,0 +1,33 @@
+services:
+  dose:
+    # Built and published by GitHub Actions on every merge to main
+    # (.github/workflows/docker-image.yml). To build from this checkout instead:
+    #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+    image: ghcr.io/jray222/dose:latest
+    pull_policy: always
+    container_name: dose
+    ports:
+      - "5733:5733"
+    environment:
+      # See backend/.env.example for every option.
+      APP_ENV: development          # set to "production" when served over HTTPS (secure cookies + HSTS)
+      FRONTEND_ORIGIN: http://localhost:5733
+      # Behind Cloudflare / your own domain (see README "Hosting behind Cloudflare"):
+      # PUBLIC_URL: https://dose.example.com
+      # TRUST_PROXY_HEADERS: "true"
+      # Time zone of the container; the deck of the day changes at local midnight.
+      TZ: ${TZ:-America/Indiana/Indianapolis}
+      # True: anyone can sign up and gets their own household. False: invite-only
+      # after the first account (the first account is always allowed and becomes the owner).
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      # Sent to Wikimedia and iNaturalist with each request (their API etiquette): a URL or email.
+      # COLLECTOR_CONTACT: you@example.com
+      # Optional, only for drafting new decks with Claude; you can also paste the key in Settings -> AI.
+      # ANTHROPIC_API_KEY: sk-ant-...
+      # SECRET_KEY: set one here, or let Dose generate and persist it in the volume.
+    volumes:
+      - dose-data:/app/backend/data
+    restart: unless-stopped
+
+volumes:
+  dose-data:
