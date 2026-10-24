@@ -1,1 +1,1 @@
-See AGENTS.md for system architecture, core business rules, database schema guidelines, and development commands.
+Read AGENTS.md first: it is the full guide to Dose (architecture, file map, data model, pack format, collector, screens, API, commands, CI and deploy, John's product decisions, rules and recipes). Keep it up to date when you change structure or rules.
