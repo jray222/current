@@ -217,7 +217,7 @@ export default function SailPage({ slug }) {
             <p className="text-xs text-white/70">{pos + 1} of {order.length}</p>
           </div>
           {user?.is_superuser && (
-            <button type="button" onClick={() => { setPlaying(false); setChoosing(true); }} aria-label="Change this picture" title="Change this picture"
+            <button type="button" onClick={() => { setPlaying(false); setChoosing(true); }} aria-label="Change this card’s pictures" title="Change this card’s pictures"
               className="btn-icon hover:bg-white/15"><Images className="w-5 h-5" /></button>
           )}
           <label className="sr-only" htmlFor="sail-speed">Seconds per picture</label>
@@ -306,8 +306,8 @@ export default function SailPage({ slug }) {
         </div>
       </div>
 
-      {choosing && facet && (
-        <PictureChooser card={card} facet={facet} onClose={() => setChoosing(false)} onChanged={() => load(true)} />
+      {choosing && (
+        <PictureChooser card={card} facets={deck.facets} initialFacet={facet?.key} onClose={() => setChoosing(false)} onChanged={() => load(true)} />
       )}
     </div>
   );

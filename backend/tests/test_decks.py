@@ -227,6 +227,80 @@ def test_owner_can_choose_and_hide_pictures(make_user, fake_sources):
     assert oak["images"]["bark"]["id"] == r.json()["replacement"]["id"]
 
 
+def test_template_is_a_valid_pack_and_imports(make_user, fake_sources):
+    client = _owner(make_user)
+    template = client.get("/api/v1/decks/template").json()
+    spec = packs.PackSpec.model_validate(template)
+    assert len(spec.facets) >= 2 and template["_how_to"]
+    assert _import(client, template) == "my-deck"
+    job_queue.drain()
+    deck = client.get("/api/v1/decks/my-deck").json()
+    assert [c["name"] for c in deck["cards"]] == ["White oak", "Sugar maple"]
+
+
+def test_owner_can_put_a_picture_on_another_view(make_user, fake_sources):
+    client = _owner(make_user)
+    _import(client)
+    job_queue.drain()
+    oak = client.get("/api/v1/decks/test-trees").json()["cards"][0]
+    options = client.get(f"/api/v1/cards/{oak['id']}/images").json()
+    assert {o["facet"] for o in options} == {"overall", "bark"}
+    tree_photo = next(o for o in options if o["facet"] == "overall" and o["status"] == "chosen")
+    downloads = fake_sources["download"]
+
+    r = client.post(f"/api/v1/images/{tree_photo['id']}/choose", json={"facet": "bark"})
+    assert r.status_code == 200, r.text
+    moved = r.json()
+    assert moved["facet"] == "bark" and moved["picked_by_person"] and moved["id"] != tree_photo["id"]
+    assert fake_sources["download"] == downloads  # copied from the other view, not fetched again
+    oak = client.get("/api/v1/decks/test-trees").json()["cards"][0]
+    assert oak["images"]["bark"]["id"] == moved["id"]
+    assert oak["images"]["overall"]["id"] == tree_photo["id"]
+
+    # Again: the same row is reused, not copied twice.
+    again = client.post(f"/api/v1/images/{tree_photo['id']}/choose", json={"facet": "bark"}).json()
+    assert again["id"] == moved["id"]
+    assert client.post(f"/api/v1/images/{tree_photo['id']}/choose", json={"facet": "nope"}).status_code == 400
+
+
+def test_owner_can_look_again_for_one_card(make_user, fake_sources, monkeypatch):
+    client = _owner(make_user)
+    _import(client)
+    job_queue.drain()
+    oak = client.get("/api/v1/decks/test-trees").json()["cards"][0]
+    bark = oak["images"]["bark"]["id"]
+
+    # Their own search: new candidates for that view; the view keeps its picture.
+    r = client.post(f"/api/v1/cards/{oak['id']}/collect", json={"facet": "bark", "query": "white oak  bark closeup"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    found = [o for o in body["images"] if o["id"] in body["found"]]
+    assert found and all(o["facet"] == "bark" for o in found)
+    assert any(o["title"] == "white oak bark closeup" for o in found)
+    assert client.get("/api/v1/decks/test-trees").json()["cards"][0]["images"]["bark"]["id"] == bark
+
+    # Looking again for the whole card replaces pictures nobody picked, and keeps picked ones.
+    pick = next(o for o in found if o["title"] == "white oak bark closeup")
+    client.post(f"/api/v1/images/{pick['id']}/choose")
+    searched = []
+    real = sources.commons_search
+    monkeypatch.setattr(sources, "commons_search", lambda c, q, limit=12: searched.append(q) or real(c, q))
+    r = client.post(f"/api/v1/cards/{oak['id']}/collect", json={})
+    assert r.status_code == 200 and r.json()["problems"] == []
+    assert "Quercus alba tree" in searched and not any("Acer" in q for q in searched)
+    assert client.get("/api/v1/decks/test-trees").json()["cards"][0]["images"]["bark"]["id"] == pick["id"]
+
+    assert client.post(f"/api/v1/cards/{oak['id']}/collect", json={"query": "x"}).status_code == 400
+    assert client.post("/api/v1/cards/9999/collect", json={}).status_code == 404
+
+
+def test_one_card_waits_while_the_deck_is_gathering(make_user, fake_sources):
+    client = _owner(make_user)
+    _import(client)  # queued, not drained
+    oak = client.get("/api/v1/decks/test-trees").json()["cards"][0]
+    assert client.post(f"/api/v1/cards/{oak['id']}/collect", json={}).status_code == 409
+
+
 def test_members_can_read_but_not_change_decks(make_user, fake_sources):
     owner = _owner(make_user)
     _import(owner)
@@ -236,6 +310,7 @@ def test_members_can_read_but_not_change_decks(make_user, fake_sources):
     image_id = deck["cards"][0]["images"]["bark"]["id"]
     assert member.get(f"/api/v1/images/{image_id}/file").status_code == 200
     assert member.post(f"/api/v1/images/{image_id}/hide").status_code == 403
+    assert member.post(f"/api/v1/cards/{deck['cards'][0]['id']}/collect", json={}).status_code == 403
     assert member.post("/api/v1/decks/test-trees/collect", json={}).status_code == 403
     assert member.post("/api/v1/decks/import", json=SMALL_PACK).status_code == 403
     assert member.delete("/api/v1/decks/test-trees").status_code == 403

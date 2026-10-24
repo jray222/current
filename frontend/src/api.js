@@ -233,11 +233,17 @@ export const recordProgress = async (cardId, result) => (await api.post('/progre
 // Instance owner: collecting, choosing pictures, adding and removing decks.
 export const collectDeck = async (slug, force = false) =>
   (await api.post(`/decks/${encodeURIComponent(slug)}/collect`, { force })).data;
+// facet: one view's pictures; left out, every picture found for the card.
 export const getCardImages = async (cardId, facet) => (await api.get(`/cards/${cardId}/images`, { params: { facet } })).data;
-export const chooseImage = async (imageId) => (await api.post(`/images/${imageId}/choose`)).data;
+// Looks again for one card now: every view, one view ({ facet }), or your own search for it ({ facet, query }).
+export const collectCard = async (cardId, { facet, query } = {}) =>
+  (await api.post(`/cards/${cardId}/collect`, { facet, query }, { timeout: 180_000 })).data;
+// facet: put the picture on another view of its card.
+export const chooseImage = async (imageId, facet) => (await api.post(`/images/${imageId}/choose`, facet ? { facet } : {})).data;
 export const hideImage = async (imageId) => (await api.post(`/images/${imageId}/hide`)).data;
 export const draftDeck = async ({ topic, count, notes }) =>
   (await api.post('/decks/draft', { topic, count, notes }, { timeout: 330_000 })).data;
+export const getDeckTemplate = async () => (await api.get('/decks/template')).data;
 export const importDeck = async (pack) => (await api.post('/decks/import', pack)).data;
 export const exportDeck = async (slug) => (await api.get(`/decks/${encodeURIComponent(slug)}/export`)).data;
 export const deleteDeck = async (slug) => (await api.delete(`/decks/${encodeURIComponent(slug)}`)).data;

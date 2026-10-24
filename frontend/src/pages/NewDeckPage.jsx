@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, FileJson, Loader2, Sparkles } from 'lucide-react';
-import { draftDeck, getAISettings, importDeck } from '../api';
+import { ArrowLeft, Download, FileJson, Loader2, Sparkles } from 'lucide-react';
+import { draftDeck, getAISettings, getDeckTemplate, importDeck } from '../api';
 import { navigate, onLinkClick } from '../lib/router';
 import { ErrorBanner, PageHeader, errorOf } from '../components/ui';
 import { Field } from '../components/Modal';
@@ -63,6 +63,19 @@ export default function NewDeckPage() {
 
   const readFile = async (file) => { if (file) setPackText(await file.text()); };
 
+  const template = async (into) => {
+    setError('');
+    try {
+      const text = JSON.stringify(await getDeckTemplate(), null, 2);
+      if (into) { setPackText(text); return; }
+      const url = URL.createObjectURL(new Blob([`${text}\n`], { type: 'application/json' }));
+      Object.assign(document.createElement('a'), { href: url, download: 'dose-deck-template.json' }).click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(errorOf(err, 'Could not load the template.'));
+    }
+  };
+
   return (
     <div className="max-w-3xl">
       <PageHeader
@@ -118,8 +131,13 @@ export default function NewDeckPage() {
         <form onSubmit={savePasted} className="card card-pad space-y-4 mt-4">
           <p className="text-sm text-muted">
             A pack is a JSON file describing the deck: its views (like Bark and Leaf, with photo search words) and its cards.
-            Use Export pack on any deck to see the format, edit it, and import it back.
+            Start from the template: it has every field filled in for two cards, with notes on what each one does.
+            Or use Export pack on any deck, edit it, and import it back.
           </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => template(false)} className="btn-soft"><Download className="w-4 h-4" /> Download the template</button>
+            <button type="button" onClick={() => template(true)} className="btn-ghost"><FileJson className="w-4 h-4" /> Start from it here</button>
+          </div>
           <input type="file" accept="application/json,.json" onChange={(e) => readFile(e.target.files?.[0])} className="text-sm" />
           <textarea className="input font-mono text-xs h-72" value={packText} onChange={(e) => setPackText(e.target.value)}
             placeholder='{"title": "...", "facets": [...], "cards": [...]}' aria-label="Pack JSON" />

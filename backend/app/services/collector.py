@@ -85,8 +85,12 @@ def score(candidate: dict, facet: dict, card: Card, *, lead: bool = False) -> fl
     return round(s, 2)
 
 
-def gather(client, deck: Deck, card: Card, facet: dict, first_facet: bool) -> list[dict]:
-    """Scored candidates for one facet of one card, best first, at most CANDIDATES_PER_FACET."""
+def gather(client, deck: Deck, card: Card, facet: dict, first_facet: bool,
+           queries: Optional[list[str]] = None) -> list[dict]:
+    """Scored candidates for one facet of one card, best first, at most CANDIDATES_PER_FACET.
+
+    With `queries` (a person's own search), only those are searched on Commons.
+    """
     found: dict[tuple[str, str], dict] = {}
 
     def add(c: dict, lead: bool = False):
@@ -95,6 +99,12 @@ def gather(client, deck: Deck, card: Card, facet: dict, first_facet: bool) -> li
         if key not in found or found[key]["score"] < c["score"]:
             found[key] = c
 
+    if queries:
+        for query in queries:
+            for c in sources.commons_search(client, query):
+                add(c)
+            time.sleep(PAUSE)
+        return sorted(found.values(), key=lambda c: -c["score"])[: settings.CANDIDATES_PER_FACET]
     if first_facet and card.wiki_title:
         lead_file = sources.wikipedia_lead_image(client, card.wiki_title)
         time.sleep(PAUSE)
@@ -192,8 +202,69 @@ def choose(db: Session, client, card: Card, facet_key: str, image: Optional[Card
     return None
 
 
-def collect_card(db: Session, client, deck: Deck, card: Card, force: bool = False) -> list[str]:
-    """Fills one card. Returns problems worth reporting (empty when all went well)."""
+_COPIED_FIELDS = ("page_url", "remote_url", "preview_url", "width", "height", "title", "author",
+                  "license", "license_url")
+
+
+def _store(db: Session, card: Card, key: str, candidates: list[dict]) -> list[CardImage]:
+    """Adds (or refreshes) candidate rows for one facet. Returns them in the candidates' order."""
+    existing = {(i.provider, i.source_id): i for i in card.images if i.facet == key}
+    rows = []
+    for rank, c in enumerate(candidates):
+        row = existing.get((c["provider"], c["source_id"][:300]))
+        if row is None:
+            row = CardImage(card=card, facet=key, provider=c["provider"], source_id=c["source_id"][:300],
+                            remote_url=c["remote_url"])
+            db.add(row)
+        for field in _COPIED_FIELDS:
+            value = c.get(field)
+            setattr(row, field, value[:800] if isinstance(value, str) else value)
+        row.score, row.rank = c["score"], rank
+        rows.append(row)
+    db.flush()
+    db.refresh(card)
+    return rows
+
+
+def search_card(db: Session, client, card: Card, facet_key: str, query: str) -> list[CardImage]:
+    """A person's own Commons search for one view of a card. The results become candidates for that
+    view; the view's picture only changes if it had none."""
+    deck = card.deck
+    facet = next(f for f in deck.facets or [] if f["key"] == facet_key)
+    rows = _store(db, card, facet_key, gather(client, deck, card, facet, first_facet=False, queries=[query]))
+    if chosen(card, facet_key) is None:
+        choose(db, client, card, facet_key)
+    db.commit()
+    return rows
+
+
+def assign(db: Session, client, image: CardImage, facet_key: str) -> CardImage:
+    """A person puts this picture on a view of its card, even one it was found for another view of
+    (a bark close-up that turned up in the leaf search). Returns the view's picture."""
+    card = image.card
+    target = image
+    if image.facet != facet_key:
+        target = next((i for i in card.images if i.facet == facet_key and i.provider == image.provider
+                       and i.source_id == image.source_id), None)
+        if target is None:
+            target = CardImage(card=card, facet=facet_key, provider=image.provider, source_id=image.source_id,
+                               score=image.score, rank=image.rank)
+            for field in _COPIED_FIELDS:
+                setattr(target, field, getattr(image, field))
+            db.add(target)
+            db.flush()
+        if not target.local_path and image.local_path and (settings.images_dir / image.local_path).is_file():
+            # Already downloaded for the other view: copy it rather than fetch it again.
+            save_image((settings.images_dir / image.local_path).read_bytes(), card.deck, card, target)
+    if target.status == "hidden":
+        target.status = "candidate"
+    choose(db, client, card, facet_key, target, by_person=True)
+    return target
+
+
+def collect_card(db: Session, client, deck: Deck, card: Card, force: bool = False,
+                 only: Optional[str] = None) -> list[str]:
+    """Fills one card (or only its `only` view). Returns problems worth reporting (empty when all went well)."""
     problems: list[str] = []
     if card.wiki_title and (force or not card.wiki_extract):
         try:
@@ -207,6 +278,8 @@ def collect_card(db: Session, client, deck: Deck, card: Card, force: bool = Fals
 
     for n, facet in enumerate(deck.facets or []):
         key = facet["key"]
+        if only and key != only:
+            continue
         current = chosen(card, key)
         if current and (current.picked_by_person or not force) and current.local_path:
             continue
@@ -215,20 +288,7 @@ def collect_card(db: Session, client, deck: Deck, card: Card, force: bool = Fals
         except sources.SourceError as e:
             problems.append(str(e))
             continue
-        existing = {(i.provider, i.source_id): i for i in card.images if i.facet == key}
-        for rank, c in enumerate(candidates):
-            row = existing.get((c["provider"], c["source_id"]))
-            if row is None:
-                row = CardImage(card=card, facet=key, provider=c["provider"], source_id=c["source_id"][:300],
-                                remote_url=c["remote_url"])
-                db.add(row)
-            for field in ("page_url", "remote_url", "preview_url", "width", "height", "title", "author",
-                          "license", "license_url"):
-                value = c.get(field)
-                setattr(row, field, value[:800] if isinstance(value, str) else value)
-            row.score, row.rank = c["score"], rank
-        db.flush()
-        db.refresh(card)
+        _store(db, card, key, candidates)
         current = chosen(card, key)
         if current is None or (not current.picked_by_person and force):
             best = choose(db, client, card, key)

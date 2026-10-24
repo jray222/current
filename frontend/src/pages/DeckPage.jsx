@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Brain, Download, RefreshCw, Sailboat, Shuffle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Brain, Download, Images, RefreshCw, Sailboat, Shuffle, Trash2 } from 'lucide-react';
 import { collectDeck, deleteDeck, exportDeck, getDeck, imagePath } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { navigate, onLinkClick } from '../lib/router';
@@ -7,6 +7,7 @@ import useDeckPolling from '../lib/useDeckPolling';
 import AuthImage from '../components/AuthImage';
 import { ErrorBanner, PageHeader, Spinner, SuccessBanner, errorOf } from '../components/ui';
 import DeckIcon from '../components/deck/DeckIcon';
+import PictureChooser from '../components/deck/PictureChooser';
 import { CollectStatus, ProgressBar, isCollecting, progressLine } from '../components/deck/DeckBits';
 
 /** A deck's cards as a photo grid, filterable by group; tap one to sail from it. */
@@ -16,6 +17,7 @@ export default function DeckPage({ slug }) {
   const [group, setGroup] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [choosing, setChoosing] = useState(null);
 
   const load = useCallback(() => getDeck(slug).then(setDeck).catch((err) => setError(errorOf(err, 'Could not load this deck.'))), [slug]);
   useEffect(() => { load(); }, [load]);
@@ -104,7 +106,7 @@ export default function DeckPage({ slug }) {
           const to = `/decks/${slug}/sail?start=${c.slug}${group ? `&group=${encodeURIComponent(group)}` : ''}`;
           const known = c.progress.box >= 3;
           return (
-            <li key={c.id}>
+            <li key={c.id} className="relative">
               <a href={to} onClick={onLinkClick(to)} className="block group">
                 <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-sunk">
                   {img && <AuthImage path={imagePath(img.id, 'thumb')} alt="" className="absolute inset-0 group-hover:scale-[1.03] transition duration-300" />}
@@ -116,10 +118,20 @@ export default function DeckPage({ slug }) {
                 <p className="font-bold mt-1.5 leading-tight">{c.name}</p>
                 {c.subtitle && <p className="text-xs text-muted truncate">{c.subtitle}</p>}
               </a>
+              {user?.is_superuser && (
+                <button type="button" onClick={() => setChoosing(c)} disabled={isCollecting(deck)}
+                  aria-label={`Change pictures of ${c.name}`} title="Change this card’s pictures"
+                  className="absolute top-2 left-2 btn-icon w-9 h-9 bg-black/45 text-white hover:bg-black/65 disabled:opacity-0">
+                  <Images className="w-4 h-4" />
+                </button>
+              )}
             </li>
           );
         })}
       </ul>
+      {choosing && (
+        <PictureChooser card={choosing} facets={deck.facets} onClose={() => setChoosing(null)} onChanged={load} />
+      )}
     </>
   );
 }

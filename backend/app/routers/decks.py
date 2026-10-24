@@ -102,6 +102,13 @@ def today(db: Session = Depends(get_db), user: User = Depends(get_current_user))
     return {"date": day.isoformat(), "deck": _deck_summary(db, deck, user) if deck else None}
 
 
+# Before /decks/{slug}, which would otherwise take "template" for a slug.
+@router.get("/decks/template")
+def deck_template(_user: User = Depends(get_current_user)):
+    """A small example pack with every field filled in, to start a deck of your own from."""
+    return packs.template()
+
+
 @router.get("/decks/{slug}")
 def get_deck(slug: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     deck = _deck_or_404(db, slug)
@@ -152,24 +159,81 @@ def record_progress(payload: ProgressIn, db: Session = Depends(get_db), user: Us
 
 # ------------------------------------------------------------------ owner: pictures
 
-@router.get("/cards/{card_id}/images")
-def card_images(card_id: int, facet: str, db: Session = Depends(get_db), _user: User = Depends(get_current_superuser)):
-    """Every picture found for one facet of a card, to choose a better one."""
+def _card_or_404(db: Session, card_id: int) -> Card:
     card = db.get(Card, card_id)
     if card is None:
         raise HTTPException(status_code=404, detail="Card not found")
+    return card
+
+
+def _options(card: Card, facet: Optional[str] = None) -> list[dict]:
     return [{**_image_json(i), "preview_url": i.preview_url}
-            for i in sorted(card.images, key=lambda i: (i.status != "chosen", -i.score)) if i.facet == facet]
+            for i in sorted(card.images, key=lambda i: (i.status != "chosen", -i.score))
+            if facet is None or i.facet == facet]
+
+
+def _facet_or_400(card: Card, facet: str) -> str:
+    if facet not in {f["key"] for f in card.deck.facets or []}:
+        raise HTTPException(status_code=400, detail="This deck has no such view")
+    return facet
+
+
+@router.get("/cards/{card_id}/images")
+def card_images(card_id: int, facet: Optional[str] = None, db: Session = Depends(get_db),
+                _user: User = Depends(get_current_superuser)):
+    """Every picture found for a card (or one facet of it), to choose a better one."""
+    return _options(_card_or_404(db, card_id), facet)
+
+
+class CardCollectIn(BaseModel):
+    # Only this view; every view when left out.
+    facet: Optional[str] = Field(default=None, max_length=40)
+    # Your own Commons search for that view, e.g. "white oak bark closeup".
+    query: Optional[str] = Field(default=None, max_length=200)
+
+
+@router.post("/cards/{card_id}/collect")
+def collect_one_card(card_id: int, payload: CardCollectIn = CardCollectIn(), db: Session = Depends(get_db),
+                     _user: User = Depends(get_current_superuser)):
+    """Looks again for one card's pictures, now. Pictures you picked stay; with a query, the results
+    are only added as candidates (the view keeps its picture unless it had none)."""
+    card = _card_or_404(db, card_id)
+    if card.deck.collect_status in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="The deck is gathering pictures. Try again when it's done.")
+    facet = _facet_or_400(card, payload.facet) if payload.facet else None
+    query = " ".join((payload.query or "").split())
+    if query and not facet:
+        raise HTTPException(status_code=400, detail="Say which view to search for")
+    found: list[int] = []
+    problems: list[str] = []
+    with sources.make_client() as client:
+        if query:
+            try:
+                found = [i.id for i in collector.search_card(db, client, card, facet, query)]
+            except sources.SourceError as e:
+                db.rollback()
+                raise HTTPException(status_code=502, detail=str(e))
+            if not found:
+                problems.append(f"Nothing openly licensed came up for “{query}”.")
+        else:
+            problems = collector.collect_card(db, client, card.deck, card, force=True, only=facet)
+    db.refresh(card)
+    return {"found": found, "problems": problems, "images": _options(card)}
+
+
+class ChooseIn(BaseModel):
+    # Put the picture on another view of its card (a bark photo found in the leaf search).
+    facet: Optional[str] = Field(default=None, max_length=40)
 
 
 @router.post("/images/{image_id}/choose")
-def choose_image(image_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_superuser)):
+def choose_image(image_id: int, payload: ChooseIn = ChooseIn(), db: Session = Depends(get_db),
+                 _user: User = Depends(get_current_superuser)):
     image = _image_or_404(db, image_id)
-    if image.status == "hidden":
-        image.status = "candidate"
+    facet = _facet_or_400(image.card, payload.facet) if payload.facet else image.facet
     try:
         with sources.make_client() as client:
-            collector.choose(db, client, image.card, image.facet, image, by_person=True)
+            image = collector.assign(db, client, image, facet)
     except sources.SourceError as e:
         db.rollback()
         raise HTTPException(status_code=502, detail=str(e))

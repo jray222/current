@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.models import Card, Deck
 
 PACKS_DIR = Path(__file__).resolve().parent.parent / "packs"
+TEMPLATE_FILE = Path(__file__).resolve().parent.parent / "pack_template.json"
 MAX_CARDS = 300
 
 
@@ -184,3 +185,8 @@ def export_pack(deck: Deck) -> dict:
         cards.append({k: v for k, v in entry.items() if v not in (None, "", [], {})})
     return {"slug": deck.slug, "version": deck.pack_version, "title": deck.title, "subtitle": deck.subtitle,
             "icon": deck.icon, "description": deck.description, "facets": deck.facets, "cards": cards}
+
+
+def template() -> dict:
+    """The import template offered on the New deck page (app/pack_template.json)."""
+    return json.loads(TEMPLATE_FILE.read_text(encoding="utf-8"))
