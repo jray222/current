@@ -80,6 +80,13 @@ frontend/
   package.json           scripts: dev, build, lint (oxlint), preview
   vite.config.js         dev port 5173, proxies /api to DOSE_API_URL or http://localhost:5733
   tailwind.config.js     tokens (see DESIGN_SYSTEM.md);  .oxlintrc.json lint rules
+  index.html             head tags: favicon, apple-touch-icon, manifest, theme-color, iOS web-app meta
+  public/                served at the site root. App icon: icon.svg is the square master; favicon.svg is it
+                         with rounded corners; apple-touch-icon.png (180, no transparency, iOS Home Screen),
+                         icon-192.png, icon-512.png (also the maskable icon; artwork sits in the safe zone),
+                         favicon-32.png; manifest.json. To change the icon, edit icon.svg and re-render every
+                         PNG from it at its size with no alpha. iOS caches Home Screen icons: remove and
+                         re-add the shortcut to see a new one.
   src/main.jsx           mounts App in ErrorBoundary + AuthProvider; theme watcher; reload-on-update
   src/App.jsx            routing (see section 7); full-screen routes skip the Shell
   src/api.js             axios instance (baseURL /api/v1, in-memory access token, one silent refresh on 401) + one function per endpoint
