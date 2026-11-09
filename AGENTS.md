@@ -21,6 +21,7 @@ Sibling apps with the same stack and layout: `jray222/staple` (recipes, port 573
 7. **No Dependabot** for now ("we'll talk later"). Do not add it unasked.
 8. No demo mode, no bundled LLM. Everything except drafting decks works with no API key.
 9. Mobile first: check 390px wide and desktop. Runs behind Cloudflare.
+10. **Security audits (`cloudflare/security-audit-skill`)**: Reference https://github.com/cloudflare/security-audit-skill (`skills/security-audit/SKILL.md`, installed globally at `~/.gemini/config/skills/security-audit/SKILL.md`). Before running an audit, sync the latest upstream changes from GitHub (`git -C ~/.gemini/config/skills/.security-audit-repo pull --ff-only origin main && cp -r ~/.gemini/config/skills/.security-audit-repo/skills/security-audit/* ~/.gemini/config/skills/security-audit/`). Proactively recommend running a `security-audit` pass (with `flash` subagents, writing to `~/security-audit-skill/dose/run-<N>/`) after any major feature update or changes to auth/2FA/sessions/keys (`routers/auth.py`, `security.py`, `deps.py`), owner-only deck/card/picture write guards (`routers/decks.py`), pack JSON imports (`services/packs.py`), outbound image fetching/downloading (`services/sources.py`, `collector.py`), or AI deck drafting (`services/llm.py`).
 
 ## 3. Stack
 
