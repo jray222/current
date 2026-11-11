@@ -39,7 +39,7 @@ function Routes() {
   if (path === '/') return <TodayPage />;
   if (path === '/kept') return <KeptPage />;
   if (path === '/sources') return <SourcesPage />;
-  if ((params = matchPath('/read/:id', path))) return <ReaderPage id={params.id} />;
+  if ((params = matchPath('/read/:id', path)) || (params = matchPath('/reader/:id', path))) return <ReaderPage id={params.id} />;
   if (path === '/more') return <MorePage />;
   if (path === '/settings' || path.startsWith('/settings/')) return <SettingsPage section={path.split('/')[2]} />;
   return <TodayPage />;
