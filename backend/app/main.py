@@ -23,6 +23,7 @@ from app.services import crawler as crawler_service
 from app.services.crawl_schedule import crawl_scheduler
 from app.services import keys as key_service
 from app.services.images import get_image_absolute_path
+from app.services import llm as _llm  # noqa: F401
 
 
 @asynccontextmanager

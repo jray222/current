@@ -9,6 +9,7 @@ from typing import Optional, Any
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
+from app.models.household import Household
 from app.models.news import Article, Category, CrawlRun, Source
 from app.services import categories as category_service
 from app.services import job_queue
@@ -104,6 +105,7 @@ def _ingest_entries(
     """
     found_count = len(entries)
     new_count = 0
+    new_article_ids: list[int] = []
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     household_cats = (
@@ -174,6 +176,7 @@ def _ingest_entries(
         db.add(article)
         db.flush()
         new_count += 1
+        new_article_ids.append(article.id)
 
         # Background thumb download
         if item.image_remote_url:
@@ -194,6 +197,18 @@ def _ingest_entries(
             )
 
     db.commit()
+
+    if new_article_ids and source.category_id is None:
+        household = db.get(Household, source.household_id)
+        if household and household.ai_categorize:
+            job_queue.enqueue(
+                "ai_categorize_batch",
+                source.household_id,
+                new_article_ids,
+                priority=Priority.LOW,
+                dedupe_key=f"ai-cat-{source.id}-{now.timestamp()}",
+            )
+
     return found_count, new_count
 
 

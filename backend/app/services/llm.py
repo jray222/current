@@ -1,12 +1,24 @@
-"""Calling Claude to draft a new deck from a topic. Optional: callers check `configured()` first;
-without a key, decks come from shipped packs or a pasted pack."""
+"""Batch AI categorization of news articles using Claude (Anthropic API).
+
+When household.ai_categorize == 1 and an Anthropic API key is configured,
+Current batches newly discovered articles and asks Claude to assign the most
+accurate category using structured tool calling (assign_categories).
+"""
 import json
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.database import SessionLocal
+from app.models.household import Household
+from app.models.news import Article, Category
 from app.services import ai as ai_service
+from app.services import job_queue
+from app.services.categories import get_general_category
+
+logger = logging.getLogger(__name__)
 
 
 class LlmError(RuntimeError):
@@ -20,96 +32,206 @@ class LlmConfig:
 
 
 def configured(db: Session) -> Optional[LlmConfig]:
+    """Returns the effective LLM configuration if an API key is available."""
     effective = ai_service.runtime_settings(db)
     key = effective["anthropic_api_key"]
     return LlmConfig(key, effective["anthropic_model"]) if key else None
 
 
 def make_client(api_key: str):
-    """The Anthropic SDK client. A function of its own so tests can swap in a fake (no network in tests)."""
+    """The Anthropic SDK client. Isolated so tests can swap in a mock (zero network in tests)."""
     import anthropic
-    return anthropic.Anthropic(api_key=api_key, timeout=300.0, max_retries=1)
+    return anthropic.Anthropic(api_key=api_key, timeout=60.0, max_retries=1)
 
 
-DECK_TOOL = {
-    "name": "save_deck",
-    "description": "Save a visual flashcard deck for one knowledge domain.",
+CATEGORIZE_TOOL = {
+    "name": "assign_categories",
+    "description": "Assign editorial categories to a batch of news articles.",
     "input_schema": {
         "type": "object",
         "properties": {
-            "title": {"type": "string", "description": "Short deck title, e.g. 'Planets of the solar system'"},
-            "subtitle": {"type": "string", "description": "One line: how many cards and what they cover"},
-            "icon": {"type": "string", "description": "A lucide icon name that fits, e.g. trees, bird, bug, orbit, atom, flower-2, book-open, drama, landmark, fish, mountain"},
-            "description": {"type": "string"},
-            "facets": {
-                "type": "array", "minItems": 1, "maxItems": 4,
-                "description": "The 1-4 views every card shows, each a kind of photo that helps recognise the subject. The first is the overall look.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "key": {"type": "string", "description": "short lowercase id, e.g. overall, bark, wings"},
-                        "label": {"type": "string", "description": "1-2 words shown on the card"},
-                        "queries": {"type": "array", "items": {"type": "string"},
-                                    "description": "1-3 Wikimedia Commons search templates using {search} for the subject, e.g. '{search} bark'"},
-                        "must": {"type": "array", "items": {"type": "string"},
-                                 "description": "Lowercase words a matching photo title usually contains, e.g. bark, trunk. Empty for the overall facet."},
-                        "inat": {"type": "boolean", "description": "true only for living things on the overall facet (adds iNaturalist photos)"},
-                    },
-                    "required": ["key", "label", "queries"],
-                },
-            },
-            "cards": {
+            "assignments": {
                 "type": "array",
+                "description": "Category assignment for each article.",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "name": {"type": "string"},
-                        "subtitle": {"type": "string", "description": "Scientific name, symbol, author or other second name"},
-                        "group": {"type": "string", "description": "A family or kind to group by"},
-                        "wiki": {"type": "string", "description": "Exact English Wikipedia article title"},
-                        "search": {"type": "string", "description": "Best term to search photos of it on Wikimedia Commons (scientific name for living things)"},
-                        "summary": {"type": "string", "description": "One memorable line, under 120 characters"},
-                        "facts": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2},
-                                  "description": "2-3 [label, short value] pairs"},
-                        "cues": {"type": "object", "additionalProperties": {"type": "string"},
-                                 "description": "For each facet key, what to notice in that photo (under 80 characters)"},
+                        "article_id": {
+                            "type": "integer",
+                            "description": "The integer ID of the article being categorized",
+                        },
+                        "category_key": {
+                            "type": "string",
+                            "description": "The exact key of the chosen category (e.g. tech, world, politics, business, science, sports, culture, health, local, general)",
+                        },
+                        "reasoning": {
+                            "type": "string",
+                            "description": "Brief 1-sentence rationale for the categorization choice",
+                        },
                     },
-                    "required": ["name", "wiki", "summary", "cues"],
+                    "required": ["article_id", "category_key"],
                 },
-            },
+            }
         },
-        "required": ["title", "facets", "cards"],
+        "required": ["assignments"],
     },
 }
 
-DECK_SYSTEM = (
-    "You design visual flashcard decks for a personal learning app. Each card is one subject (a species, "
-    "a planet, an element, a painting...) shown as a few photos with a one-line summary and short cues on "
-    "what to notice, so the person builds a visual memory. Be accurate: only facts you are sure of. Pick "
-    "subjects that have real photographs on Wikimedia Commons. Always answer by calling save_deck."
+CATEGORIZE_SYSTEM = (
+    "You are an expert news editor and classifier for Current, an intelligent news reading app. "
+    "Given a list of available categories (with keys and labels) and a list of articles "
+    "(with article_id, title, summary, and tags), pick the most accurate category "
+    "for each article. Prefer specific categories (tech, science, politics, business, health, sports, culture, world, us) "
+    "over 'general' or 'top-stories' unless the article is broadly uncategorizable. "
+    "Always invoke the assign_categories tool with assignments for each article provided."
 )
 
 
-def draft_deck(cfg: LlmConfig, topic: str, count: int = 25, notes: str = "") -> dict:
-    """Asks Claude for a deck pack about `topic`; returns the tool input dict (validate it as a PackSpec)."""
-    prompt = (f"Topic: {topic}\nNumber of cards: about {count}\n"
-              + (f"Notes from the learner: {notes}\n" if notes else "")
-              + "Choose the most common or most important subjects first.")
+def categorize_batch(cfg: LlmConfig, articles: list[dict], categories: list[dict]) -> list[dict]:
+    """Calls Claude with structured tool calling to classify a batch of articles into categories.
+
+    articles: list of dicts with keys: article_id (int), title (str), summary (optional str), tags (optional list)
+    categories: list of dicts with keys: key (str), label (str)
+    returns: list of dicts with keys: article_id (int), category_key (str)
+    """
+    if not articles or not categories:
+        return []
+
+    cat_list_str = "\n".join(f"- {c['key']}: {c['label']}" for c in categories)
+    art_payload = []
+    for a in articles:
+        art_id = a.get("article_id") or a.get("id")
+        title = a.get("title", "")
+        summary = (a.get("summary") or "")[:250]
+        tags = a.get("tags") or []
+        art_payload.append({
+            "article_id": art_id,
+            "title": title,
+            "summary": summary,
+            "tags": tags[:5] if isinstance(tags, list) else [],
+        })
+
+    prompt = (
+        f"Available categories:\n{cat_list_str}\n\n"
+        f"Articles to categorize:\n{json.dumps(art_payload, indent=2)}\n\n"
+        "Assign the best category to each article by calling assign_categories."
+    )
+
     try:
         client = make_client(cfg.api_key)
         message = client.messages.create(
-            model=cfg.model, max_tokens=16000, system=DECK_SYSTEM, tools=[DECK_TOOL],
-            tool_choice={"type": "tool", "name": "save_deck"}, messages=[{"role": "user", "content": prompt}])
+            model=cfg.model,
+            max_tokens=4096,
+            system=CATEGORIZE_SYSTEM,
+            tools=[CATEGORIZE_TOOL],
+            tool_choice={"type": "tool", "name": "assign_categories"},
+            messages=[{"role": "user", "content": prompt}],
+        )
     except Exception as e:
-        raise LlmError(_anthropic_message(e) or f"Claude could not draft the deck ({type(e).__name__}).") from e
+        raise LlmError(_anthropic_message(e) or f"Claude could not categorize articles ({type(e).__name__}).") from e
+
     for block in getattr(message, "content", []) or []:
-        if getattr(block, "type", "") == "tool_use" and isinstance(getattr(block, "input", None), dict):
-            return block.input
-    raise LlmError("Claude did not return a deck.")
+        if getattr(block, "type", "") == "tool_use" and block.name == "assign_categories":
+            tool_input = getattr(block, "input", {})
+            if isinstance(tool_input, dict) and "assignments" in tool_input:
+                assignments = tool_input["assignments"]
+                if isinstance(assignments, list):
+                    return assignments
+
+    raise LlmError("Claude did not return category assignments.")
+
+
+def apply_ai_categorization(
+    db: Session,
+    household_id: int,
+    article_ids: Optional[list[int]] = None,
+    batch_size: int = 20,
+) -> int:
+    """Categorizes unassigned or specified articles for a household using Claude.
+
+    Returns the number of articles successfully categorized.
+    """
+    cfg = configured(db)
+    if not cfg:
+        return 0
+
+    household = db.get(Household, household_id)
+    if not household or not household.ai_categorize:
+        return 0
+
+    # Query all active categories for this household
+    cats = db.query(Category).filter(Category.household_id == household_id, Category.hidden == 0).all()
+    if not cats:
+        return 0
+
+    cat_map = {c.key: c.id for c in cats}
+    cat_specs = [{"key": c.key, "label": c.label} for c in cats]
+
+    # Find articles to categorize
+    if article_ids:
+        articles = (
+            db.query(Article)
+            .filter(Article.household_id == household_id, Article.id.in_(article_ids))
+            .all()
+        )
+    else:
+        # Default: batch categorize articles in General
+        general_cat = get_general_category(db, household_id)
+        articles = (
+            db.query(Article)
+            .filter(Article.household_id == household_id, Article.category_id == general_cat.id)
+            .order_by(Article.discovered_at.desc())
+            .limit(50)
+            .all()
+        )
+
+    if not articles:
+        return 0
+
+    updated_count = 0
+    # Process in batches
+    for i in range(0, len(articles), batch_size):
+        chunk = articles[i : i + batch_size]
+        payload = [
+            {
+                "article_id": a.id,
+                "title": a.title,
+                "summary": a.summary or "",
+                "tags": a.feed_tags or [],
+            }
+            for a in chunk
+        ]
+
+        try:
+            assignments = categorize_batch(cfg, payload, cat_specs)
+        except Exception as e:
+            logger.warning("AI categorization batch failed: %s", e)
+            continue
+
+        chunk_by_id = {a.id: a for a in chunk}
+        for assign in assignments:
+            art_id = assign.get("article_id")
+            cat_key = assign.get("category_key")
+            if art_id in chunk_by_id and cat_key in cat_map:
+                art = chunk_by_id[art_id]
+                new_cat_id = cat_map[cat_key]
+                if art.category_id != new_cat_id:
+                    art.category_id = new_cat_id
+                    updated_count += 1
+
+        db.commit()
+
+    return updated_count
+
+
+def _ai_categorize_job(household_id: int, article_ids: list[int]) -> None:
+    """Background worker handler for batch AI categorization."""
+    with SessionLocal() as db:
+        apply_ai_categorization(db, household_id, article_ids)
 
 
 def _anthropic_message(e: Exception) -> str:
-    """Anthropic's own error message when there is one (a bad key, no credit...)."""
+    """Extracts Anthropic's descriptive error message when available."""
     body = getattr(e, "body", None)
     if isinstance(body, dict):
         msg = (body.get("error") or {}).get("message")
@@ -121,3 +243,7 @@ def _anthropic_message(e: Exception) -> str:
         except Exception:
             return ""
     return ""
+
+
+# Register background job
+job_queue.register("ai_categorize_batch", _ai_categorize_job)
