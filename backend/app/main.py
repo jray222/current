@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 import app.models  # noqa: F401  Ensures all models are registered with Base
 from app.config import settings
@@ -10,11 +11,13 @@ from app.database import engine, Base, SessionLocal
 from app.deps import get_current_user
 from app.frontend import serve_frontend
 from app.migrations import run_lightweight_migrations
+from app.models.user import User
 from app.routers import auth
 from app.routers import settings as settings_router
 from app.routers import sources
 from app.services import categories as category_service
 from app.services import keys as key_service
+from app.services.images import get_image_absolute_path
 
 
 @asynccontextmanager
@@ -70,6 +73,17 @@ app.include_router(auth.router)
 _protected = [Depends(get_current_user)]
 app.include_router(settings_router.router, dependencies=_protected)
 app.include_router(sources.router, dependencies=_protected)
+
+
+@app.get("/images/{household_id}/{filename}")
+def get_image(household_id: int, filename: str, user: User = Depends(get_current_user)):
+    if user.household_id != household_id and not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    rel_path = f"{household_id}/{filename}"
+    file_path = get_image_absolute_path(rel_path)
+    if not file_path or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(file_path, media_type="image/jpeg")
 
 
 @app.get("/health")
