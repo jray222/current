@@ -13,6 +13,7 @@ from app.services.dedupe import canonical_url
 
 NON_ARTICLE_PATTERNS = re.compile(
     r"/(category|categories|tag|tags|author|authors|user|users|topic|topics|hub|hubs|"
+    r"section|sections|world-news|us-news|quizzes|projects|video|videos|galleries|gallery|"
     r"login|signup|signin|signout|register|privacy|terms|about|contact|"
     r"subscribe|search|feed|rss|newsletter|newsletters|wp-content|wp-admin|archive|pages?)(/|[-_.]|$)",
     re.IGNORECASE,

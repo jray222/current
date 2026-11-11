@@ -32,6 +32,7 @@ export default function Shell({ children }) {
   const { path } = useLocation();
   const { user, logout } = useAuth();
   const activeTab = TABS.find((t) => t.match(path));
+  const isReaderPage = path.startsWith('/reader') || path.startsWith('/read');
 
   return (
     <div className="min-h-screen bg-cream">
@@ -64,31 +65,33 @@ export default function Shell({ children }) {
         </div>
       </aside>
 
-      <main className="lg:pl-64 pb-28 lg:pb-12 pt-safe">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 pt-5 sm:pt-8">
+      <main className={`lg:pl-64 ${isReaderPage ? 'pb-12' : 'pb-28 lg:pb-12'} pt-safe`}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 pt-4 sm:pt-8">
           {children}
         </div>
       </main>
 
-      <nav aria-label="Main" className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur border-t border-line/70 pb-safe">
-        <ul className="grid grid-cols-4 max-w-md mx-auto px-2 pt-2 pb-2">
-          {TABS.map(({ to, label, Icon }) => {
-            const active = activeTab?.to === to;
-            return (
-              <li key={to}>
-                <a href={to} onClick={onLinkClick(to)} aria-current={active ? 'page' : undefined}
-                  className={`flex flex-col items-center gap-0.5 py-1.5 rounded-2xl text-xs font-bold transition ${
-                    active ? 'text-brand-700 dark:text-brand-300' : 'text-muted'}`}>
-                  <span className={`flex items-center justify-center w-12 h-8 rounded-full transition ${active ? 'bg-brand-100 dark:bg-brand-900/50' : ''}`}>
-                    <Icon className="w-5 h-5" aria-hidden="true" strokeWidth={active ? 2.5 : 2} />
-                  </span>
-                  {label}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+      {!isReaderPage && (
+        <nav aria-label="Main" className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur border-t border-line/70 pb-safe">
+          <ul className="grid grid-cols-4 max-w-md mx-auto px-2 pt-2 pb-2">
+            {TABS.map(({ to, label, Icon }) => {
+              const active = activeTab?.to === to;
+              return (
+                <li key={to}>
+                  <a href={to} onClick={onLinkClick(to)} aria-current={active ? 'page' : undefined}
+                    className={`flex flex-col items-center gap-0.5 py-1.5 rounded-2xl text-xs font-bold transition ${
+                      active ? 'text-brand-700 dark:text-brand-300' : 'text-muted'}`}>
+                    <span className={`flex items-center justify-center w-12 h-8 rounded-full transition ${active ? 'bg-brand-100 dark:bg-brand-900/50' : ''}`}>
+                      <Icon className="w-5 h-5" aria-hidden="true" strokeWidth={active ? 2.5 : 2} />
+                    </span>
+                    {label}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
     </div>
   );
 }

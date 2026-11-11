@@ -15,10 +15,29 @@ export default {
   theme: {
     extend: {
       colors: {
-        cream: token('cream'),       // page background (#F6F4EF in light mode)
+        cream: {
+          DEFAULT: token('cream'),
+          50: '#FAF8F5',
+          100: '#F6F4EF',
+          200: '#ECEAE3',
+          300: '#E2DFD6',
+        },
         surface: token('surface'),   // cards, sheets, inputs
         sunk: token('sunk'),         // wells inside a card, chip backgrounds
-        ink: token('ink'),           // main text
+        ink: {
+          DEFAULT: token('ink'),
+          50: '#F8FAFA',
+          100: '#EDF1F0',
+          200: '#D5DDDC',
+          300: '#AAB8B6',
+          400: '#7F9390',
+          500: '#5A6F6C',
+          600: '#425350',
+          700: '#303D3B',
+          800: '#212A29',
+          900: '#151C1B',
+          950: '#0B100F',
+        },
         muted: token('muted'),       // secondary text
         line: token('line'),         // borders and dividers
         brand: {

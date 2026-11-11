@@ -135,24 +135,31 @@ export default function TodayPage() {
   return (
     <div className="pb-16">
       {/* Editorial Masthead */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pb-4 mb-4 border-b border-cream-200 dark:border-ink-800">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-brand-700 dark:text-volt-400">
-            {formattedDate}
-          </p>
-          <h1 className="font-serif font-black text-3xl sm:text-4xl text-ink-950 dark:text-cream-50 tracking-tight mt-0.5">
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-brand-700 dark:text-volt-400">
+            <span>{formattedDate}</span>
+            <span>•</span>
+            <span className="text-ink-400 dark:text-ink-500 font-normal">Curated Edition</span>
+          </div>
+          <h1 className="font-serif font-black text-3xl sm:text-5xl text-ink-950 dark:text-cream-50 tracking-tight mt-1">
             Today’s Edition
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={handleCrawlNow}
-          disabled={crawling}
-          className="flex items-center gap-2 self-start sm:self-auto bg-white dark:bg-ink-900 border border-cream-300 dark:border-ink-700 hover:bg-cream-100 dark:hover:bg-ink-800 text-xs font-semibold px-4 py-2 rounded-xl text-ink-800 dark:text-cream-100 shadow-xs transition-all"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 text-volt-500 ${crawling ? 'animate-spin' : ''}`} />
-          <span>{crawling ? 'Updating feeds…' : 'Crawl now'}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="hidden md:inline-block text-[11px] text-ink-400 dark:text-ink-500 italic">
+            Swipe right to keep • Swipe left to dismiss
+          </span>
+          <button
+            type="button"
+            onClick={handleCrawlNow}
+            disabled={crawling}
+            className="inline-flex items-center gap-2 bg-white dark:bg-ink-900 border border-cream-300 dark:border-ink-700 hover:border-brand-500 hover:text-brand-700 dark:hover:border-volt-400 dark:hover:text-volt-400 text-xs font-bold px-4 py-2 rounded-xl text-ink-800 dark:text-cream-100 shadow-xs transition-all active:scale-95"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-brand-600 dark:text-volt-400 ${crawling ? 'animate-spin' : ''}`} />
+            <span>{crawling ? 'Checking feeds…' : 'Sync feeds'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Sticky Category Bar */}

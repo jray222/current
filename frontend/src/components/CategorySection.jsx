@@ -43,29 +43,29 @@ export default function CategorySection({
   const Icon = ICON_MAP[category.icon] || Newspaper;
 
   return (
-    <section className="mb-8">
-      {/* Editorial Section Header */}
-      <div className="flex items-center justify-between pb-2 mb-3 border-b-2 border-brand-700/20 dark:border-volt-500/20">
+    <section className="mb-10">
+      {/* Editorial Section Masthead */}
+      <div className="flex items-center justify-between pb-2.5 mb-3.5 border-b border-ink-950/10 dark:border-cream-50/10">
         <button
           onClick={() => onSelectCategory && onSelectCategory(category.key)}
-          className="flex items-center gap-2 group text-left"
+          className="flex items-center gap-2.5 group text-left"
         >
-          <div className="w-6 h-6 rounded-md bg-brand-700/10 dark:bg-volt-500/10 flex items-center justify-center text-brand-700 dark:text-volt-400">
-            <Icon className="w-3.5 h-3.5" />
+          <div className="w-7 h-7 rounded-lg bg-brand-700/10 dark:bg-volt-500/10 flex items-center justify-center text-brand-700 dark:text-volt-400 group-hover:bg-brand-700 group-hover:text-white transition-all">
+            <Icon className="w-4 h-4" />
           </div>
-          <h2 className="font-serif font-bold text-lg text-ink-900 dark:text-cream-100 group-hover:text-brand-700 dark:group-hover:text-volt-400 transition-colors">
+          <h2 className="font-serif font-black text-xl text-ink-950 dark:text-cream-50 group-hover:text-brand-700 dark:group-hover:text-volt-400 tracking-tight transition-colors">
             {category.label}
           </h2>
-          <ChevronRight className="w-4 h-4 text-ink-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <ChevronRight className="w-4 h-4 text-ink-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
         </button>
 
-        <span className="text-xs font-semibold text-ink-500 dark:text-ink-400 bg-cream-200 dark:bg-ink-800 px-2 py-0.5 rounded-full">
-          {articles.length} stories
+        <span className="text-xs font-semibold text-ink-500 dark:text-ink-400 bg-cream-200/80 dark:bg-ink-800 px-2.5 py-0.5 rounded-full font-mono">
+          {articles.length} {articles.length === 1 ? 'story' : 'stories'}
         </span>
       </div>
 
       {/* Article Rows List */}
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {articles.map((article) => (
           <ArticleRow
             key={article.id}
