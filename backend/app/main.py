@@ -17,8 +17,10 @@ from app.routers import articles
 from app.routers import feed
 from app.routers import settings as settings_router
 from app.routers import sources
+from app.routers import user_settings
 from app.services import categories as category_service
 from app.services import crawler as crawler_service
+from app.services.crawl_schedule import crawl_scheduler
 from app.services import keys as key_service
 from app.services.images import get_image_absolute_path
 
@@ -35,9 +37,12 @@ async def lifespan(_app: FastAPI):
         category_service.seed_all_households(db)
         # Reset any interrupted crawls from previous runs
         crawler_service.resume_pending_crawls(db)
+
+    crawl_scheduler.start()
     try:
         yield
     finally:
+        crawl_scheduler.stop()
         from app.services.browser import close_browser
         close_browser()
 
@@ -84,6 +89,7 @@ app.include_router(settings_router.router, dependencies=_protected)
 app.include_router(sources.router, dependencies=_protected)
 app.include_router(articles.router, dependencies=_protected)
 app.include_router(feed.router, dependencies=_protected)
+app.include_router(user_settings.router, dependencies=_protected)
 
 
 @app.get("/images/{household_id}/{filename}")
