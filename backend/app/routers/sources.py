@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.news import Category, Source, Article, CrawlRun, Vote
 from app.routers._scoping import get_owned_or_404, ensure_category
 from app.services import categories as category_service
+from app.services import crawler as crawler_service
 
 router = APIRouter(tags=["sources"])
 
@@ -127,6 +128,10 @@ class CrawlRunRead(BaseModel):
     new: int
     skipped_robots: int
     message: Optional[str]
+
+
+class SourceProbePayload(BaseModel):
+    url: str = Field(..., min_length=1, max_length=1000)
 
 
 # --------------------------------------------------------------------------
@@ -552,6 +557,15 @@ def get_source_runs(
     ]
 
 
+@router.post("/sources/probe")
+def probe_source_url(
+    payload: SourceProbePayload,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return crawler_service.check_source(db, user.household_id, payload.url)
+
+
 @router.post("/sources/{id}/crawl")
 def trigger_source_crawl(
     id: int,
@@ -560,8 +574,7 @@ def trigger_source_crawl(
     db: Session = Depends(get_db),
 ):
     src = get_owned_or_404(db, Source, id, user.household_id, "Source")
-    src.crawl_status = "queued"
-    db.commit()
+    crawler_service.enqueue_source_crawl(src.id, trigger="manual")
     return {"ok": True, "source_id": src.id, "status": "queued"}
 
 
@@ -570,12 +583,5 @@ def trigger_household_crawl(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    sources = (
-        db.query(Source)
-        .filter(Source.household_id == user.household_id, Source.enabled == 1)
-        .all()
-    )
-    for s in sources:
-        s.crawl_status = "queued"
-    db.commit()
-    return {"ok": True, "queued_count": len(sources)}
+    count = crawler_service.crawl_household(user.household_id, trigger="manual")
+    return {"ok": True, "queued_count": count}

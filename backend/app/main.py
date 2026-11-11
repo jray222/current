@@ -16,6 +16,7 @@ from app.routers import auth
 from app.routers import settings as settings_router
 from app.routers import sources
 from app.services import categories as category_service
+from app.services import crawler as crawler_service
 from app.services import keys as key_service
 from app.services.images import get_image_absolute_path
 
@@ -30,7 +31,13 @@ async def lifespan(_app: FastAPI):
         key_service.load(db)
         # Ensure default categories exist for each household
         category_service.seed_all_households(db)
-    yield
+        # Reset any interrupted crawls from previous runs
+        crawler_service.resume_pending_crawls(db)
+    try:
+        yield
+    finally:
+        from app.services.browser import close_browser
+        close_browser()
 
 
 app = FastAPI(
