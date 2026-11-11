@@ -10,8 +10,8 @@ def _utcnow():
 
 class Household(Base):
     """
-    The people who were invited together. Decks are shared by the whole server;
-    progress belongs to each person.
+    A household tenancy group. News sources, categories and articles belong
+    to a household; votes, interest learning and kept reading lists belong to each user.
     """
     __tablename__ = "households"
 
@@ -19,4 +19,14 @@ class Household(Base):
     name = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=_utcnow)
 
+    # Crawl scheduling & categorization settings
+    crawl_enabled = Column(Integer, default=1, nullable=False)
+    crawl_time = Column(String(10), default="06:00", nullable=False)
+    crawl_every_hours = Column(Integer, default=24, nullable=False)
+    crawl_handled_at = Column(DateTime, nullable=True)
+    ai_categorize = Column(Integer, default=0, nullable=False)
+
     users = relationship("User", back_populates="household", cascade="all, delete-orphan")
+    categories = relationship("Category", back_populates="household", cascade="all, delete-orphan")
+    sources = relationship("Source", back_populates="household", cascade="all, delete-orphan")
+    articles = relationship("Article", back_populates="household", cascade="all, delete-orphan")

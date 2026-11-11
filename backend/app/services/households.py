@@ -9,4 +9,7 @@ def create_household(db: Session, name: str) -> Household:
     household = Household(name=name.strip()[:100] or "My Household")
     db.add(household)
     db.flush()
+    from app.services.categories import seed_all
+    seed_all(db, household.id)
     return household
+

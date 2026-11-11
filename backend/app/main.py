@@ -12,6 +12,8 @@ from app.frontend import serve_frontend
 from app.migrations import run_lightweight_migrations
 from app.routers import auth
 from app.routers import settings as settings_router
+from app.routers import sources
+from app.services import categories as category_service
 from app.services import keys as key_service
 
 
@@ -23,8 +25,8 @@ async def lifespan(_app: FastAPI):
     with SessionLocal() as db:
         # Before anything decrypts: the key check, plain AI provider keys, "Sign everyone out".
         key_service.load(db)
-        # Categories seeded per household, crawl/fulltext resume, and crawl scheduler
-        # are plugged in during subsequent phases (phases 1-6).
+        # Ensure default categories exist for each household
+        category_service.seed_all_households(db)
     yield
 
 
@@ -67,6 +69,7 @@ app.include_router(auth.router)
 
 _protected = [Depends(get_current_user)]
 app.include_router(settings_router.router, dependencies=_protected)
+app.include_router(sources.router, dependencies=_protected)
 
 
 @app.get("/health")

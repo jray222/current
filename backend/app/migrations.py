@@ -17,8 +17,18 @@ from sqlalchemy.engine import Engine
 # Table -> list of (column_name, ddl_type_and_default) to ensure exist.
 # ddl_type_and_default must be valid SQLite DDL. Add an entry here whenever a
 # column is added to a model after a release; booleans are INTEGER 0/1.
-# Example: "cards": [("audio_path", "VARCHAR(500) NULL")],
-_REQUIRED_COLUMNS: dict[str, list[tuple[str, str]]] = {}
+_REQUIRED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "households": [
+        ("crawl_enabled", "INTEGER DEFAULT 1"),
+        ("crawl_time", "VARCHAR(10) DEFAULT '06:00'"),
+        ("crawl_every_hours", "INTEGER DEFAULT 24"),
+        ("crawl_handled_at", "DATETIME NULL"),
+        ("ai_categorize", "INTEGER DEFAULT 0"),
+    ],
+    "articles": [
+        ("canonical_url", "VARCHAR(1000) NULL"),
+    ],
+}
 
 
 def run_lightweight_migrations(engine: Engine) -> set[str]:
