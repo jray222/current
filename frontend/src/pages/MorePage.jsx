@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronRight, Settings, Users, KeyRound, ShieldCheck, LogOut, Rss, Bookmark, Sliders } from 'lucide-react';
+import { ChevronRight, Settings, Users, KeyRound, ShieldCheck, LogOut, Rss, Bookmark, Sliders, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { onLinkClick } from '../lib/router';
 import { PageHeader } from '../components/ui';
@@ -30,6 +30,7 @@ export default function MorePage() {
         <Row to="/sources" Icon={Rss} title="Sources" hint="Manage news sites and crawl rules" tone="bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300" />
         <Row to="/kept" Icon={Bookmark} title="Kept reading list" hint="Articles saved for later" tone="bg-volt-100 text-volt-800 dark:bg-volt-900/40 dark:text-volt-300" />
         <Row to="/settings/crawl" Icon={Sliders} title="Crawl & retention" hint="Schedules and source limits" tone="bg-moss-100 text-moss-700 dark:bg-moss-900/40 dark:text-moss-300" />
+        <Row to="/settings/learning" Icon={Sparkles} title="Interest & learning" hint="Trained topics and muted words" tone="bg-volt-100 text-volt-800 dark:bg-volt-900/40 dark:text-volt-300" />
         <Row to="/settings/household" Icon={Users} title="Household" hint="Members and invites" tone="bg-moss-100 text-moss-700 dark:bg-moss-900/40 dark:text-moss-300" />
         <Row to="/settings/security" Icon={ShieldCheck} title="Account security" hint="Password and two-factor" tone="bg-moss-100 text-moss-700 dark:bg-moss-900/40 dark:text-moss-300" />
         {user?.is_superuser && (

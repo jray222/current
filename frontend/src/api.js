@@ -224,47 +224,49 @@ export const updateAISettings = async (changes) => (await api.post('/settings/ai
 
 // Front page edition & category feeds
 export const getFrontpage = async () => (await api.get('/frontpage')).data;
-export const getFeed = async (category = '', limit = 30) =>
-  (await api.get('/feed', { params: { category: category || undefined, limit } })).data;
+export const getFeed = async (category = '', limit = 30, offset = 0) =>
+  (await api.get('/feed', { params: { category: category || undefined, limit, offset } })).data;
 
 // Votes (keep / skip / open) & Undo
-export const postVote = async (articleId, verdict, weight = null) =>
-  (await api.post('/votes', { article_id: articleId, verdict, weight })).data;
+export const postVote = async (articleId, verdict) =>
+  (await api.post('/votes', { article_id: articleId, verdict })).data;
 export const undoVote = async (articleId) => (await api.delete(`/votes/${articleId}`)).data;
 
 // Kept reading list
-export const getKept = async (state = 'unread', category = '') =>
-  (await api.get('/kept', { params: { state, category: category || undefined } })).data;
-export const updateKeptState = async (articleId, state) =>
-  (await api.patch(`/kept/${articleId}`, { state })).data;
-export const fetchKeptFulltext = async () => (await api.post('/kept/fulltext')).data;
+export const getKept = async (status = 'all', limit = 50, offset = 0) =>
+  (await api.get('/kept', { params: { status, limit, offset } })).data;
+export const updateKeptState = async (articleId, keptState) =>
+  (await api.patch(`/kept/${articleId}`, { kept_state: keptState })).data;
 
 // Reader & full-text on demand
 export const getArticle = async (id) => (await api.get(`/articles/${id}`)).data;
-export const fetchArticleFulltext = async (id, { method = 'auto', force = false } = {}) =>
-  (await api.post(`/articles/${id}/fulltext`, { method, force })).data;
-export const articleThumbPath = (id) => `/articles/${id}/thumb`;
+export const fetchArticleFulltext = async (id, { force = false, sync = true } = {}) =>
+  (await api.post(`/articles/${id}/fetch-text`, null, { params: { force, sync } })).data;
 
 // Sources & Categories
 export const getCategories = async () => (await api.get('/categories')).data;
+export const createCategory = async (data) => (await api.post('/categories', data)).data;
+export const updateCategory = async (id, changes) => (await api.patch(`/categories/${id}`, changes)).data;
+export const deleteCategory = async (id) => (await api.delete(`/categories/${id}`)).data;
+
 export const getSources = async () => (await api.get('/sources')).data;
-export const checkSource = async (url) => (await api.post('/sources/check', { url })).data;
-export const getCheckSource = async (id) => (await api.get(`/sources/check/${id}`)).data;
+export const probeSource = async (url) => (await api.post('/sources/probe', { url })).data;
 export const createSource = async (data) => (await api.post('/sources', data)).data;
 export const updateSource = async (id, changes) => (await api.patch(`/sources/${id}`, changes)).data;
 export const deleteSource = async (id) => (await api.delete(`/sources/${id}`)).data;
-export const crawlSource = async (id, force = false) => (await api.post(`/sources/${id}/crawl`, { force })).data;
+export const crawlSource = async (id, force = false) => (await api.post(`/sources/${id}/crawl`, null, { params: { force } })).data;
 export const crawlAll = async () => (await api.post('/crawl')).data;
-export const testFulltext = async (id) => (await api.post(`/sources/${id}/test-fulltext`)).data;
+export const getSourceRuns = async (id) => (await api.get(`/sources/${id}/runs`)).data;
 
 // Crawl & Learning settings
 export const getCrawlSettings = async () => (await api.get('/settings/crawl')).data;
-export const updateCrawlSettings = async (changes) => (await api.put('/settings/crawl', changes)).data;
+export const updateCrawlSettings = async (changes) => (await api.patch('/settings/crawl', changes)).data;
 export const getLearningSettings = async () => (await api.get('/settings/learning')).data;
+export const muteLearningTerm = async (term) => (await api.post('/settings/learning/mute', { term })).data;
+export const unmuteLearningTerm = async (term) => (await api.delete(`/settings/learning/mute/${encodeURIComponent(term)}`)).data;
+export const resetLearningModel = async () => (await api.post('/settings/learning/reset')).data;
 
-// Pictures sit behind the sign-in, so <img src> can't fetch them directly: load the bytes with the
-// access token and hand the <img> a blob URL (see components/AuthImage.jsx).
+// Pictures sit behind the sign-in: load the bytes with the access token and hand the <img> a blob URL
 export const fetchImageBlob = async (path) => (await api.get(path, { responseType: 'blob' })).data;
-export const imagePath = (id, _size = 'full') => `/articles/${id}/thumb`;
 
 export default api;

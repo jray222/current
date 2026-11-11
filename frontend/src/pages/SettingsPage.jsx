@@ -1,13 +1,17 @@
 import React from 'react';
-import { KeyRound, ShieldCheck, Users } from 'lucide-react';
+import { KeyRound, ShieldCheck, Users, Sliders, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { onLinkClick } from '../lib/router';
 import { PageHeader } from '../components/ui';
 import HouseholdSection from '../components/settings/HouseholdSection';
 import SecuritySection from '../components/settings/SecuritySection';
 import AISection from '../components/settings/AISection';
+import CrawlSection from '../components/settings/CrawlSection';
+import LearningSection from '../components/settings/LearningSection';
 
 const SECTIONS = [
+  { id: 'crawl', label: 'Crawl schedule', Icon: Sliders, Component: CrawlSection },
+  { id: 'learning', label: 'Interest & learning', Icon: Sparkles, Component: LearningSection },
   { id: 'household', label: 'Household', Icon: Users, Component: HouseholdSection },
   { id: 'security', label: 'Security', Icon: ShieldCheck, Component: SecuritySection },
   { id: 'ai', label: 'AI & server', Icon: KeyRound, Component: AISection, ownerOnly: true },
