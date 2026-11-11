@@ -13,6 +13,7 @@ from app.frontend import serve_frontend
 from app.migrations import run_lightweight_migrations
 from app.models.user import User
 from app.routers import auth
+from app.routers import articles
 from app.routers import settings as settings_router
 from app.routers import sources
 from app.services import categories as category_service
@@ -80,6 +81,7 @@ app.include_router(auth.router)
 _protected = [Depends(get_current_user)]
 app.include_router(settings_router.router, dependencies=_protected)
 app.include_router(sources.router, dependencies=_protected)
+app.include_router(articles.router, dependencies=_protected)
 
 
 @app.get("/images/{household_id}/{filename}")
