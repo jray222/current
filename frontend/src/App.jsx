@@ -7,14 +7,12 @@ import { Spinner } from './components/ui';
 import { lazyPage } from './appUpdate';
 import { matchPath, useLocation } from './lib/router';
 import TodayPage from './pages/TodayPage';
-import DecksPage from './pages/DecksPage';
-import MorePage from './pages/MorePage';
 
-// Heavier pages load when first opened.
-const DeckPage = lazyPage(() => import('./pages/DeckPage'));
-const SailPage = lazyPage(() => import('./pages/SailPage'));
-const QuizPage = lazyPage(() => import('./pages/QuizPage'));
-const NewDeckPage = lazyPage(() => import('./pages/NewDeckPage'));
+// Lazy-loaded pages
+const KeptPage = lazyPage(() => import('./pages/KeptPage'));
+const SourcesPage = lazyPage(() => import('./pages/SourcesPage'));
+const ReaderPage = lazyPage(() => import('./pages/ReaderPage'));
+const MorePage = lazyPage(() => import('./pages/MorePage'));
 const SettingsPage = lazyPage(() => import('./pages/SettingsPage'));
 
 function SignInNotice() {
@@ -39,25 +37,16 @@ function Routes() {
   const { path } = useLocation();
   let params;
   if (path === '/') return <TodayPage />;
-  if (path === '/decks') return <DecksPage />;
-  if (path === '/decks/new') return <NewDeckPage />;
-  if ((params = matchPath('/decks/:slug', path))) return <DeckPage slug={params.slug} />;
+  if (path === '/kept') return <KeptPage />;
+  if (path === '/sources') return <SourcesPage />;
+  if ((params = matchPath('/read/:id', path))) return <ReaderPage id={params.id} />;
   if (path === '/more') return <MorePage />;
   if (path === '/settings' || path.startsWith('/settings/')) return <SettingsPage section={path.split('/')[2]} />;
   return <TodayPage />;
 }
 
-/** Sailing and quizzing take the whole screen, without the navigation. */
-function FullScreen({ path }) {
-  let params;
-  if ((params = matchPath('/decks/:slug/sail', path))) return <SailPage slug={params.slug} />;
-  if ((params = matchPath('/decks/:slug/quiz', path))) return <QuizPage slug={params.slug} />;
-  return null;
-}
-
 export default function App() {
   const { initializing, isAuthenticated } = useAuth();
-  const { path } = useLocation();
 
   if (initializing) {
     return (
@@ -67,14 +56,6 @@ export default function App() {
     );
   }
   if (!isAuthenticated) return <AuthGateway />;
-
-  if (/^\/decks\/[^/]+\/(sail|quiz)$/.test(path)) {
-    return (
-      <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
-        <FullScreen path={path} />
-      </Suspense>
-    );
-  }
 
   return (
     <Shell>

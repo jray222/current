@@ -1,8 +1,8 @@
-/** Dose design tokens. See docs/DESIGN_SYSTEM.md.
+/** Current design tokens. See docs/DESIGN_SYSTEM.md.
  *
  * Neutral surfaces (page, card, text, borders) are CSS variables set in src/index.css,
  * so one class (bg-cream, text-ink...) works in both light and dark mode. The brand
- * colours (brand teal, moss, amber) are fixed scales. */
+ * colours (ink blue, volt yellow, moss green, amber) are fixed scales. */
 const token = (name) => `rgb(var(--${name}) / <alpha-value>)`
 
 /** @type {import('tailwindcss').Config} */
@@ -15,15 +15,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        cream: token('cream'),       // page background
+        cream: token('cream'),       // page background (#F6F4EF in light mode)
         surface: token('surface'),   // cards, sheets, inputs
         sunk: token('sunk'),         // wells inside a card, chip backgrounds
         ink: token('ink'),           // main text
         muted: token('muted'),       // secondary text
         line: token('line'),         // borders and dividers
         brand: {
-          50: '#ecfbf8', 100: '#d0f4ed', 200: '#a3e8db', 300: '#6dd4c4', 400: '#3bb9a9',
-          500: '#1f9d8f', 600: '#147f74', 700: '#13665e', 800: '#13514c', 900: '#0f3b38',
+          50: '#f0f4f9', 100: '#dbe5f1', 200: '#b9cde3', 300: '#8faed1', 400: '#5f8bbc',
+          500: '#3c6da4', 600: '#2c5586', 700: '#1F3A5F', 800: '#192e4c', 900: '#14253c', 950: '#0d1726',
+        },
+        volt: {
+          50: '#fffde7', 100: '#fff9c4', 200: '#fff176', 300: '#ffea00', 400: '#ffd600',
+          500: '#F5C518', 600: '#e0ad08', 700: '#b88a04', 800: '#8f6a02', 900: '#664a02',
         },
         moss: {
           50: '#f1f8ec', 100: '#deefd2', 200: '#bfdfa8', 300: '#9acb77', 400: '#78b54f',
@@ -45,9 +49,9 @@ export default {
       },
       boxShadow: {
         // Soft, cool, never pure black.
-        soft: '0 1px 2px rgb(20 40 40 / 0.06), 0 4px 14px rgb(20 40 40 / 0.08)',
-        lift: '0 2px 4px rgb(20 40 40 / 0.08), 0 12px 28px rgb(20 40 40 / 0.14)',
-        pop: '0 6px 18px rgb(20 127 116 / 0.35)',
+        soft: '0 1px 2px rgb(20 35 55 / 0.06), 0 4px 14px rgb(20 35 55 / 0.08)',
+        lift: '0 2px 4px rgb(20 35 55 / 0.08), 0 12px 28px rgb(20 35 55 / 0.14)',
+        pop: '0 6px 18px rgb(31 58 95 / 0.35)',
       },
     },
   },

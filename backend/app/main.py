@@ -10,9 +10,8 @@ from app.database import engine, Base, SessionLocal
 from app.deps import get_current_user
 from app.frontend import serve_frontend
 from app.migrations import run_lightweight_migrations
-from app.routers import auth, decks
+from app.routers import auth
 from app.routers import settings as settings_router
-from app.services import collector, packs
 from app.services import keys as key_service
 
 
@@ -24,16 +23,14 @@ async def lifespan(_app: FastAPI):
     with SessionLocal() as db:
         # Before anything decrypts: the key check, plain AI provider keys, "Sign everyone out".
         key_service.load(db)
-        # Decks shipped in app/packs, then collection that was waiting when the server last stopped
-        # (and, with AUTO_COLLECT, pictures for shipped decks that have none yet).
-        packs.seed_shipped(db)
-        collector.resume(db)
+        # Categories seeded per household, crawl/fulltext resume, and crawl scheduler
+        # are plugged in during subsequent phases (phases 1-6).
     yield
 
 
 app = FastAPI(
-    title="Dose API",
-    description="Backend API for Dose: visual knowledge cards, one domain at a time.",
+    title="Current API",
+    description="Backend API for Current: news that learns what you like.",
     version="0.1.0",
     debug=settings.DEBUG,
     lifespan=lifespan,
@@ -65,11 +62,10 @@ async def security_headers_middleware(request, call_next):
 
 
 # Auth routes are public (login/register/refresh live here); everything
-# else requires a valid access token. Decks are shared; progress is per person.
+# else requires a valid access token.
 app.include_router(auth.router)
 
 _protected = [Depends(get_current_user)]
-app.include_router(decks.router, dependencies=_protected)
 app.include_router(settings_router.router, dependencies=_protected)
 
 

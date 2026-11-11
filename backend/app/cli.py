@@ -1,16 +1,7 @@
 """
 Server commands, run inside the container:
 
-    docker exec -it dose python -m app.cli collect midwest-trees
-
-collect         Gathers a deck's pictures and summaries now and prints how it
-                went (--force looks again for views that have a picture;
-                pictures the owner picked stay). The app also does this by
-                itself in the background.
-
-For when nobody can sign in:
-
-    docker exec -it dose python -m app.cli clear-lock <username>
+    docker exec -it current python -m app.cli clear-lock <username>
 
 clear-lock      Lets the account sign in from a new device again while
                 sign-in is paused after wrong passwords (services/lockout.py).
@@ -23,7 +14,7 @@ reset-password  Sets a new password for an account (asked twice, not shown),
                 instance owner; admins and members can also get a reset link
                 in Account security (services/password_resets.py).
 
-    docker exec -it dose python -m app.cli reset-password <username>
+    docker exec -it current python -m app.cli reset-password <username>
 """
 import argparse
 import getpass
@@ -69,7 +60,7 @@ def reset_password(username: str, link: bool = False) -> int:
             db.commit()
             address = password_resets.url(db, token)
             print(f"One-time reset link for {username}, valid for an hour:")
-            print(address or f"  <your Dose address>/?reset={token}")
+            print(address or f"  <your Current address>/?reset={token}")
             return 0
         if not sys.stdin.isatty():
             print("Run this with docker exec -it so the password can be typed, or add --link for a reset link.")
@@ -90,50 +81,20 @@ def reset_password(username: str, link: bool = False) -> int:
     return 0
 
 
-def collect(slug: str, force: bool = False) -> int:
-    """Gathers a deck's pictures and summaries now, in this process, printing how it went."""
-    from app.database import Base
-    from app.models import Deck
-    from app.services import collector, packs
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        packs.seed_shipped(db)
-        deck = db.query(Deck).filter(Deck.slug == slug).first()
-        if deck is None:
-            names = ", ".join(d.slug for d in db.query(Deck).order_by(Deck.id))
-            print(f"No deck called {slug}. Decks: {names or 'none'}")
-            return 1
-        deck_id = deck.id
-    print(f"Collecting {slug}...")
-    collector.run_deck(deck_id, force=force)
-    with SessionLocal() as db:
-        deck = db.get(Deck, deck_id)
-        pictures = sum(1 for c in deck.cards for i in c.images if i.status == "chosen" and i.local_path)
-        print(f"{deck.collect_status}: {deck.collect_done} of {deck.collect_total} cards, {pictures} pictures.")
-        if deck.collect_message:
-            print(deck.collect_message)
-        return 0 if deck.collect_status == "done" else 1
-
-
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m app.cli", description="Dose server commands.")
+    parser = argparse.ArgumentParser(prog="python -m app.cli", description="Current server commands.")
     commands = parser.add_subparsers(dest="command", required=True)
     clear = commands.add_parser("clear-lock", help="let an account sign in from new devices again")
     clear.add_argument("username")
     reset = commands.add_parser("reset-password", help="set a new password for an account")
     reset.add_argument("username")
     reset.add_argument("--link", action="store_true", help="print a one-time reset link instead")
-    gather = commands.add_parser("collect", help="gather a deck's pictures and summaries now")
-    gather.add_argument("slug")
-    gather.add_argument("--force", action="store_true", help="look again for views that already have a picture")
     args = parser.parse_args(argv)
     run_lightweight_migrations(engine)
     if args.command == "clear-lock":
         return clear_lock(args.username)
     if args.command == "reset-password":
         return reset_password(args.username, link=args.link)
-    if args.command == "collect":
-        return collect(args.slug, force=args.force)
     return 2
 
 

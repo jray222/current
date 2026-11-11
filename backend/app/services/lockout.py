@@ -13,7 +13,7 @@ A browser that signs in to an account keeps a signed cookie for that account
   hash is always checked, so nothing tells a locked account from a wrong
   password or an unknown name.
 
-Known-browser counts are kept in memory (Dose is one process), so a restart
+Known-browser counts are kept in memory (Current is one process), so a restart
 forgets them; the per-username count is on the user row.
 """
 import secrets
@@ -29,7 +29,7 @@ from app.config import settings
 from app.models import LoginAuditLog, User
 from app.security import create_device_token, decode_token
 
-DEVICE_COOKIE_PREFIX = "dose_device_"
+DEVICE_COOKIE_PREFIX = "current_device_"
 DEVICE_DAYS = 365
 WINDOW = timedelta(minutes=15)  # wrong passwords further apart than this start a new count
 MAX_PAUSE = timedelta(hours=24)

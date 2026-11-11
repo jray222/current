@@ -207,7 +207,7 @@ def looks_encrypted(value: Optional[str]) -> bool:
 def fingerprint(key: bytes | str) -> str:
     """A short name for a key that reveals nothing about it, e.g. 3f9a-07c2-b1d4."""
     raw = key.encode("utf-8") if isinstance(key, str) else key
-    digest = hashlib.sha256(b"dose key fingerprint\0" + raw).hexdigest()[:12]
+    digest = hashlib.sha256(b"current key fingerprint\0" + raw).hexdigest()[:12]
     return f"{digest[:4]}-{digest[4:8]}-{digest[8:]}"
 
 

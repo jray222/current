@@ -10,23 +10,27 @@ RUN npm run build
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    FRONTEND_DIST=/app/frontend-dist
+    FRONTEND_DIST=/app/frontend-dist \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /app/backend
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+ && pip install --no-cache-dir -r requirements.txt \
+ && python -m playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY backend/app ./app
 COPY --from=frontend /src/dist /app/frontend-dist
 
 # Database + generated secret key live here; mount a volume to persist them.
-RUN useradd --create-home --uid 1000 dose && mkdir -p /app/backend/data && chown -R dose /app/backend/data
-USER dose
+RUN useradd --create-home --uid 1000 current && mkdir -p /app/backend/data && chown -R current /app/backend/data
+USER current
 VOLUME ["/app/backend/data"]
 
-EXPOSE 5733
+EXPOSE 5734
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5733/health')" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5734/health')" || exit 1
 
-# One worker process: background work (collecting pictures) lives in-process.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5733", "--proxy-headers"]
+# One worker process: background crawling & full-text extraction live in-process.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5734", "--proxy-headers"]

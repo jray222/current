@@ -11,12 +11,12 @@
     <meta name="theme-color" content="#111415" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Dose" />
-    <title>Dose</title>
+    <meta name="apple-mobile-web-app-title" content="Current" />
+    <title>Current</title>
     <script>
       // Apply the saved theme before the first paint, so dark mode doesn't flash light.
       try {
-        var t = localStorage.getItem('dose:theme');
+        var t = localStorage.getItem('current:theme');
         if (t === 'dark' || ((!t || t === 'system') && matchMedia('(prefers-color-scheme: dark)').matches)) {
           document.documentElement.classList.add('dark');
         }

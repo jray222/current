@@ -1,5 +1,5 @@
 # Tests every pull request, and on every merge to main publishes the Docker
-# image to GitHub's container registry: ghcr.io/jray222/dose:latest (plus a
+# image to GitHub's container registry: ghcr.io/jray222/current:latest (plus a
 # sha-<commit> tag to roll back to) for linux/amd64 and linux/arm64.
 #
 # There is no nightly test run. base-image-update.yml checks daily whether the
@@ -96,6 +96,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
             ${{ steps.meta.outputs.labels }}
-            dose.base-digest=${{ steps.base.outputs.digest }}
+            current.base-digest=${{ steps.base.outputs.digest }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

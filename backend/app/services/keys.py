@@ -27,7 +27,7 @@ from app.security import (
 )
 
 CHECK_KEY = "data_key_check"
-CHECK_TEXT = "dose key check"
+CHECK_TEXT = "current key check"
 RETIRED_KEY = "legacy_data_key_retired"
 SESSIONS_KEY = "sessions_generation"
 SIGNED_OUT_KEY = "signed_everyone_out_at"
@@ -177,13 +177,13 @@ def describe(db: Session) -> dict:
                       if invalid == 1 else
                       f"DATA_KEYS has {invalid} entries that aren't valid keys, so they're ignored. Check for typos.")
     if file_source:
-        advice.append("The sign-in key is a file in Dose's data volume, next to the database. Copy it into "
+        advice.append("The sign-in key is a file in Current's data volume, next to the database. Copy it into "
                       "SECRET_KEY in Portainer (or docker-compose.yml) so it's a deliberate secret, and keep a "
                       "copy in your password manager.")
     if not configured:
         advice.append("Data is encrypted with a key made from the sign-in key, so changing SECRET_KEY would make "
                       "the Anthropic key and 2FA unreadable. To separate them, make a data key below, "
-                      "add it to DATA_KEYS, restart Dose, then re-encrypt.")
+                      "add it to DATA_KEYS, restart Current, then re-encrypt.")
     elif legacy_values or (total and data[0]["values"] < total):
         advice.append("Some values still use an older key. Re-encrypt so everything uses the newest one.")
     elif len(configured) > 1 and not any(d["values"] for d in data[1:]):
@@ -237,7 +237,7 @@ def rotate(db: Session) -> dict:
     stops trying the key made from SECRET_KEY. Safe to run again."""
     configured, _ = configured_data_keys()
     if not configured:
-        raise KeyActionError("Add a data key to DATA_KEYS and restart Dose first.")
+        raise KeyActionError("Add a data key to DATA_KEYS and restart Current first.")
     if key_state.problem:
         raise KeyActionError("Fix the key problem first: put the old key back, or use the current keys from now on.")
     skipped: list[str] = []

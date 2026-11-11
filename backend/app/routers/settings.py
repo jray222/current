@@ -61,7 +61,7 @@ def update_ai_settings(payload: AISettingsUpdate, db: Session = Depends(get_db))
 class RegistrationSettings(BaseModel):
     # 'invite': new accounts need an invite link; 'open': anyone can sign up.
     mode: Literal["invite", "open"]
-    # Where people reach this Dose from the internet; invite links use it.
+    # Where people reach this Current from the internet; invite links use it.
     public_url: str = ""
     # PUBLIC_URL from the server's environment (used when the owner sets nothing).
     public_url_default: str = ""

@@ -1,9 +1,9 @@
-// After Dose is updated, a page that is still running the old app asks for
+// After Current is updated, a page that is still running the old app asks for
 // code files that the update replaced, and that page would go blank. When that
 // happens, reload once so the browser picks up the new version.
 import { lazy } from 'react';
 
-const KEY = 'dose:reloaded-for-update';
+const KEY = 'current:reloaded-for-update';
 const AGAIN_AFTER_MS = 30_000; // never loop if a reload doesn't help
 
 /** Reloads the page unless it already did so moments ago. True if reloading. */

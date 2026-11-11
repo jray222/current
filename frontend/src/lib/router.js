@@ -1,4 +1,4 @@
-// A very small history-based router: Dose has a handful of pages, so a library isn't worth it.
+// A very small history-based router: Current has a handful of pages, so a library isn't worth it.
 import { useCallback, useEffect, useState } from 'react';
 
 const listeners = new Set();

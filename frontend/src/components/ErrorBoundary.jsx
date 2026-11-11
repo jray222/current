@@ -11,7 +11,7 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error) {
-    console.error('Dose page error:', error);
+    console.error('Current page error:', error);
   }
 
   render() {
@@ -20,7 +20,7 @@ export default class ErrorBoundary extends React.Component {
       <div role="alert" className="card card-pad max-w-md mx-auto my-16 text-center">
         <p className="font-display text-lg font-extrabold">This page didn't load.</p>
         <p className="mt-2 text-sm text-muted">
-          Dose may have just been updated. Reloading picks up the latest version.
+          Current may have just been updated. Reloading picks up the latest version.
         </p>
         <button onClick={() => window.location.reload()} className="btn-primary mt-4">
           <RefreshCw className="w-4 h-4" aria-hidden="true" />

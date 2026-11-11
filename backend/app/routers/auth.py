@@ -235,7 +235,7 @@ def register(payload: RegisterRequest, request: Request, response: Response, db:
         elif invite_service.registration_mode(db) != "open":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Sign-up is by invitation only. Ask whoever runs this Dose for an invite link.",
+                detail="Sign-up is by invitation only. Ask whoever runs this Current for an invite link.",
             )
 
     if db.query(User).filter(User.username == payload.username).first():
@@ -508,7 +508,7 @@ def setup_2fa(user: User = Depends(get_current_user), db: Session = Depends(get_
     user.totp_last_used_step = None
     db.commit()
 
-    issuer = "Dose"
+    issuer = "Current"
     otpauth_uri = pyotp.TOTP(secret).provisioning_uri(name=user.username, issuer_name=issuer)
 
     qr_img = qrcode.make(otpauth_uri)

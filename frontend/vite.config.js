@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 
 // The dev server proxies /api to the FastAPI backend so the browser sees a
 // single origin: the httpOnly refresh cookie just works and no CORS is needed.
-const backend = process.env.DOSE_API_URL || 'http://localhost:5733'
+const backend = process.env.CURRENT_API_URL || 'http://localhost:5734'
 
 export default defineConfig({
   plugins: [react()],

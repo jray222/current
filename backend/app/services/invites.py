@@ -61,13 +61,13 @@ _PUBLIC_URL_KEY = "public_url"
 
 
 def clean_public_url(url: Optional[str]) -> str:
-    """'https://dose.example.com/' -> 'https://dose.example.com' ('' if not a web address)."""
+    """'https://current.example.com/' -> 'https://current.example.com' ('' if not a web address)."""
     url = (url or "").strip().rstrip("/")
     return url if re.fullmatch(r"https?://[^\s/?#]+(/[^\s?#]*)?", url) else ""
 
 
 def public_url(db: Session) -> str:
-    """Where people reach this Dose from the internet: the owner's setting, else PUBLIC_URL."""
+    """Where people reach this Current from the internet: the owner's setting, else PUBLIC_URL."""
     row = db.query(RuntimeConfig).filter(RuntimeConfig.key == _PUBLIC_URL_KEY).first()
     if row is not None:
         return clean_public_url(row.value)
@@ -79,7 +79,7 @@ def set_public_url(db: Session, url: Optional[str]) -> str:
     url = (url or "").strip()
     cleaned = clean_public_url(url)
     if url and not cleaned:
-        raise ValueError("Enter a full web address, like https://dose.example.com")
+        raise ValueError("Enter a full web address, like https://current.example.com")
     row = db.query(RuntimeConfig).filter(RuntimeConfig.key == _PUBLIC_URL_KEY).first()
     if not url:
         if row is not None:

@@ -63,7 +63,7 @@ def enqueue(kind: str, *args) -> bool:
     _q.put(job)
     with _lock:
         if _thread is None or not _thread.is_alive():
-            _thread = threading.Thread(target=_worker, name="dose-jobs", daemon=True)
+            _thread = threading.Thread(target=_worker, name="current-jobs", daemon=True)
             _thread.start()
     return True
 

@@ -66,7 +66,7 @@ def get_client_ip(request: Request) -> str:
     control (TRUST_PROXY_HEADERS), every request comes from the proxy, so the
     real address is read from its headers: Cloudflare's CF-Connecting-IP
     first, then X-Real-IP, then X-Forwarded-For. Only a request that comes
-    from a proxy address (see _CLOUDFLARE) is believed, so if Dose's port is
+    from a proxy address (see _CLOUDFLARE) is believed, so if Current's port is
     also open to the internet, nobody can make up an address."""
     peer = request.client.host if request.client else "unknown"
     if not (settings.TRUST_PROXY_HEADERS and is_trusted_proxy(peer)):

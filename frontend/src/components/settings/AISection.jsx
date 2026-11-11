@@ -46,14 +46,14 @@ function AnthropicCard() {
 
   return (
     <Section title="AI (Anthropic Claude)"
-      hint="Optional. With a key, Dose can draft a new deck for any topic you name. Everything else works without one.">
+      hint="Optional. With a key, Claude can categorize articles from mixed-topic sources into categories. Everything else works without one.">
       <ErrorBanner message={error} />
       <SuccessBanner message={saved} />
       <div className={`rounded-3xl p-4 flex items-center gap-3 ${settings.anthropic_api_key_set ? 'bg-moss-50 dark:bg-moss-900/30' : 'bg-sunk/70'}`}>
         <Sparkles className={`w-6 h-6 shrink-0 ${settings.anthropic_api_key_set ? 'text-moss-600' : 'text-muted'}`} aria-hidden="true" />
         <div>
           <p className="font-bold">{settings.anthropic_api_key_set ? 'An API key is set' : 'No API key'}</p>
-          <p className="text-sm text-muted">{settings.key_source ? SOURCE[settings.key_source] : 'Without a key you can still add decks by importing a pack.'}</p>
+          <p className="text-sm text-muted">{settings.key_source ? SOURCE[settings.key_source] : 'Without a key Current categorizes articles using keywords.'}</p>
         </div>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); save({ anthropic_api_key: key.trim() }, 'API key saved.'); }} className="space-y-3">
@@ -126,9 +126,9 @@ function NewKey() {
         </button>
       </div>
       <ol className="list-decimal pl-5 text-sm text-muted space-y-1">
-        <li>Save it in your password manager. Dose doesn&apos;t keep this copy.</li>
+        <li>Save it in your password manager. Current doesn&apos;t keep this copy.</li>
         <li>Put it at the front of <span className="font-mono">DATA_KEYS</span> in docker-compose.yml, keeping any keys already there after it, separated by commas.</li>
-        <li>Restart Dose, come back here and choose Re-encrypt.</li>
+        <li>Restart Current, come back here and choose Re-encrypt.</li>
       </ol>
     </div>
   );
@@ -186,7 +186,7 @@ function ServerKeysCard() {
   const hasDataKeys = keys?.data_keys?.length > 0;
 
   return (
-    <Section title="Server keys" hint="The keys that sign people in and lock 2FA secrets and the stored AI key. Dose never shows the keys themselves.">
+    <Section title="Server keys" hint="The keys that sign people in and lock 2FA secrets and the stored AI key. Current never shows the keys themselves.">
       <ErrorBanner message={error} />
       <SuccessBanner message={done} />
       {!keys ? <Spinner /> : (

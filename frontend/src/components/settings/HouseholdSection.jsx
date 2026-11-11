@@ -127,7 +127,7 @@ function Members() {
   };
 
   return (
-    <Section title="Household members" hint={`Everyone on this Dose shares the same decks. What each person knows stays their own.`}>
+    <Section title="Household members" hint={`Everyone on Current shares news sources and categories. Votes, saved articles, and personal interest learning stay your own.`}>
       <ErrorBanner message={error} />
       {!users ? <Spinner /> : (
         <ul className="space-y-2.5">
@@ -205,8 +205,8 @@ function NewInviteCard({ invite, onDone, isOwner }) {
   const link = inviteLink(invite);
   const unreachable = isPrivateAddress(link);
   const share = () => navigator.share?.({
-    title: 'Your Dose invite',
-    text: invite.kind === 'member' ? `Join ${invite.household_name} on Dose` : 'Your invite to Dose',
+    title: 'Your Current invite',
+    text: invite.kind === 'member' ? `Join ${invite.household_name} on Current` : 'Your invite to Current',
     url: link,
   }).catch(() => {});
   return (
@@ -221,7 +221,7 @@ function NewInviteCard({ invite, onDone, isOwner }) {
           <span>
             This link uses a local address, so it only works on your own network.
             {isOwner ? ' Set your public address above (e.g. your Cloudflare domain) and create a new invite.'
-              : ' Open Dose through its public address and create the invite there.'}
+              : ' Open Current through its public address and create the invite there.'}
           </span>
         </p>
       )}
@@ -346,11 +346,11 @@ function Invites() {
             <label htmlFor="public-url" className="label flex items-center gap-1.5"><Link2 className="w-3.5 h-3.5" aria-hidden="true" /> Public address (for invite links)</label>
             <div className="flex gap-2">
               <input id="public-url" type="url" inputMode="url" value={urlDraft} onChange={(e) => setUrlDraft(e.target.value)}
-                placeholder={publicDefault || 'https://dose.example.com'} className="input !py-2 text-sm" />
+                placeholder={publicDefault || 'https://current.example.com'} className="input !py-2 text-sm" />
               <button type="submit" disabled={urlDraft.trim() === publicUrl} className="btn-soft shrink-0">{urlSaved ? 'Saved' : 'Save'}</button>
             </div>
             <p className="text-xs text-muted">
-              The address people use to reach Dose from the internet, like your Cloudflare domain. Invite links use it
+              The address people use to reach Current from the internet, like your Cloudflare domain. Invite links use it
               {publicUrl ? '.' : `; until it's set they use ${here}${isPrivateAddress(here) ? ', which only works on your network' : ''}.`}
             </p>
           </form>

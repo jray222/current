@@ -33,8 +33,8 @@ function AuthShell({ children }) {
         <div className="flex flex-col items-center mb-7 space-y-3">
           <Logo className="w-16 h-16 drop-shadow-md" />
           <div className="text-center">
-            <h1 className="text-4xl text-ink">Dose</h1>
-            <p className="text-muted font-semibold">Pick the week. Shop once. Eat well.</p>
+            <h1 className="text-4xl text-ink">Current</h1>
+            <p className="text-muted font-semibold">The news, as it happens, as you like it.</p>
           </div>
         </div>
         <div className="card card-pad space-y-5 shadow-lift">
@@ -141,9 +141,9 @@ function RegisterForm({ needsInvite, initialCode = '' }) {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <h2 className="text-2xl">
-          {setupRequired ? 'Set up Dose' : joining ? `Join ${invite.household_name}` : 'Create your account'}
+          {setupRequired ? 'Set up Current' : joining ? `Join ${invite.household_name}` : 'Create your account'}
         </h2>
-        <p className="text-sm text-muted mt-1">{joining ? 'You will learn from the same decks as everyone here.' : subtitle}</p>
+        <p className="text-sm text-muted mt-1">{joining ? 'You will share news sources and categories with everyone here.' : subtitle}</p>
       </div>
 
       {invite?.valid && (
@@ -152,7 +152,7 @@ function RegisterForm({ needsInvite, initialCode = '' }) {
           <span>
             {joining
               ? <>You've been invited to join <strong>{invite.household_name}</strong>.</>
-              : 'You\'ve been invited to Dose.'}
+              : 'You\'ve been invited to Current.'}
           </span>
         </div>
       )}
@@ -281,7 +281,7 @@ function ForgotPassword() {
       {open && (
         <p className="mt-2" data-testid="forgot-help">
           Ask an admin of your household for a reset link (Settings &rarr; Household). Admins can ask whoever runs this
-          Dose. If that&apos;s you, run <code className="text-ink">python -m app.cli reset-password &lt;username&gt;</code> in
+          Current. If that&apos;s you, run <code className="text-ink">python -m app.cli reset-password &lt;username&gt;</code> in
           the container.
         </p>
       )}
@@ -294,7 +294,7 @@ function PauseHint({ failures }) {
   if (failures < 2) return null;
   return (
     <p className="text-xs text-muted" data-testid="pause-hint">
-      Sure it's right? After 5 wrong tries, Dose pauses sign-in from new devices for 15 minutes or longer. Devices
+      Sure it's right? After 5 wrong tries, Current pauses sign-in from new devices for 15 minutes or longer. Devices
       you've signed in on before aren't affected, and a household admin can lift the pause.
     </p>
   );
@@ -431,7 +431,7 @@ export default function AuthGateway() {
 
       {!setupRequired && canRegister && (
         <p className="text-sm text-muted text-center">
-          {showRegister ? 'Already have an account? ' : inviteOnly ? 'Got an invite? ' : 'New to Dose? '}
+          {showRegister ? 'Already have an account? ' : inviteOnly ? 'Got an invite? ' : 'New to Current? '}
           <button type="button" onClick={() => setMode(showRegister ? 'login' : 'register')}
             className="text-brand-600 hover:text-brand-700 dark:text-brand-300 font-bold cursor-pointer">
             {showRegister ? 'Sign in' : inviteOnly ? 'Sign up with your code' : 'Create an account'}

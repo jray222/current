@@ -31,7 +31,7 @@ def _load_or_create_secret_key() -> str:
 class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = False
-    DATABASE_URL: str = f"sqlite:///{(DATA_DIR / 'dose.db').as_posix()}"
+    DATABASE_URL: str = f"sqlite:///{(DATA_DIR / 'current.db').as_posix()}"
 
     # --- Authentication & Security ---
     # Signs sign-ins (JWTs and known-device cookies). Until DATA_KEYS is set
@@ -72,12 +72,12 @@ class Settings(BaseSettings):
     # used together with credentialed (cookie-based) requests.
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 
-    # The address people use to reach this Dose from the internet, e.g.
-    # https://dose.example.com (behind Cloudflare or another proxy). Invite
+    # The address people use to reach this Current from the internet, e.g.
+    # https://current.example.com (behind Cloudflare or another proxy). Invite
     # links are built from it. The instance owner can also set it in the app.
     PUBLIC_URL: str = ""
 
-    REFRESH_COOKIE_NAME: str = "dose_refresh_token"
+    REFRESH_COOKIE_NAME: str = "current_refresh_token"
 
     # Directory of the built frontend (index.html + assets/). When set, the
     # API process also serves the UI - used by the Docker image.
@@ -92,22 +92,23 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-5-5"
 
-    # --- Pictures and knowledge collection (services/collector.py) ---
-    # Where downloaded pictures live: <IMAGES_DIR>/<deck>/<card>/... Default data/images.
+    # --- Current News Crawler, Safe Fetch & Reader settings ---
+    # Sent with outbound crawler requests: Current/0.1 (+PUBLIC_URL; CRAWLER_CONTACT)
+    CRAWLER_CONTACT: str = "https://github.com/jray222/current"
+    RESPECT_ROBOTS: bool = True
+    CRAWL_DELAY_SECONDS: float = 1.0
+    MAX_NEW_PER_SOURCE: int = 25
+    MAX_ARTICLE_PAGES: int = 5
+    RETENTION_DAYS: int = 14
+    BROWSER_FETCH: bool = True
+    ADBLOCK_EXTRA_HOSTS: str = ""
+    ALLOW_PRIVATE_SOURCES: bool = False
+    ALLOWED_PORTS: str = ""
+    SCHEDULER_ENABLED: bool = True
+
+    # Where downloaded article thumbnails live: <IMAGES_DIR>/<household>/<yyyy-mm>/...
+    # Default backend/data/images.
     IMAGES_DIR: str = ""
-    # Collect pictures and summaries for shipped decks that have none yet, at startup.
-    AUTO_COLLECT: bool = True
-    # Allow pictures licensed for non-commercial use only (CC BY-NC). Dose is a personal
-    # app, so they are allowed; set False if you run it for something commercial.
-    ALLOW_NONCOMMERCIAL_IMAGES: bool = True
-    # Sent with every request to Wikimedia and iNaturalist, as their API rules ask.
-    # Put a way to reach you in it (a URL or an email address).
-    COLLECTOR_CONTACT: str = "https://github.com/jray222/dose"
-    # Longest side of a downloaded picture, and of its thumbnail.
-    IMAGE_MAX_PX: int = 1600
-    THUMB_MAX_PX: int = 480
-    # Candidates kept per facet to choose from.
-    CANDIDATES_PER_FACET: int = 8
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 # Isolated database + settings, applied before the app is imported.
-_tmp = tempfile.mkdtemp(prefix="dose-tests-")
+_tmp = tempfile.mkdtemp(prefix="current-tests-")
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(_tmp, 'test.db').as_posix()}"
 os.environ["SECRET_KEY"] = "test-secret-key-" + "x" * 48
 os.environ["ALLOW_REGISTRATION"] = "True"

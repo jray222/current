@@ -219,38 +219,52 @@ export const getAISettings = async () => (await api.get('/settings/ai')).data;
 export const updateAISettings = async (changes) => (await api.post('/settings/ai', changes)).data;
 
 // --------------------------------------------------------------------------
-// Decks, cards and pictures
+// Current: News Front Page, Feed, Sources, Reader, Kept & Settings
 // --------------------------------------------------------------------------
 
-export const getDecks = async () => (await api.get('/decks')).data;
-export const getToday = async () => (await api.get('/today')).data;
-export const getDeck = async (slug) => (await api.get(`/decks/${encodeURIComponent(slug)}`)).data;
-export const getQuiz = async (slug, limit = 20) =>
-  (await api.get(`/decks/${encodeURIComponent(slug)}/quiz`, { params: { limit } })).data.card_ids;
-// result: 'seen' (sailed past), 'knew' or 'again' (quiz).
-export const recordProgress = async (cardId, result) => (await api.post('/progress', { card_id: cardId, result })).data;
+// Front page edition & category feeds
+export const getFrontpage = async () => (await api.get('/frontpage')).data;
+export const getFeed = async (category = '', limit = 30) =>
+  (await api.get('/feed', { params: { category: category || undefined, limit } })).data;
 
-// Instance owner: collecting, choosing pictures, adding and removing decks.
-export const collectDeck = async (slug, force = false) =>
-  (await api.post(`/decks/${encodeURIComponent(slug)}/collect`, { force })).data;
-// facet: one view's pictures; left out, every picture found for the card.
-export const getCardImages = async (cardId, facet) => (await api.get(`/cards/${cardId}/images`, { params: { facet } })).data;
-// Looks again for one card now: every view, one view ({ facet }), or your own search for it ({ facet, query }).
-export const collectCard = async (cardId, { facet, query } = {}) =>
-  (await api.post(`/cards/${cardId}/collect`, { facet, query }, { timeout: 180_000 })).data;
-// facet: put the picture on another view of its card.
-export const chooseImage = async (imageId, facet) => (await api.post(`/images/${imageId}/choose`, facet ? { facet } : {})).data;
-export const hideImage = async (imageId) => (await api.post(`/images/${imageId}/hide`)).data;
-export const draftDeck = async ({ topic, count, notes }) =>
-  (await api.post('/decks/draft', { topic, count, notes }, { timeout: 330_000 })).data;
-export const getDeckTemplate = async () => (await api.get('/decks/template')).data;
-export const importDeck = async (pack) => (await api.post('/decks/import', pack)).data;
-export const exportDeck = async (slug) => (await api.get(`/decks/${encodeURIComponent(slug)}/export`)).data;
-export const deleteDeck = async (slug) => (await api.delete(`/decks/${encodeURIComponent(slug)}`)).data;
+// Votes (keep / skip / open) & Undo
+export const postVote = async (articleId, verdict, weight = null) =>
+  (await api.post('/votes', { article_id: articleId, verdict, weight })).data;
+export const undoVote = async (articleId) => (await api.delete(`/votes/${articleId}`)).data;
+
+// Kept reading list
+export const getKept = async (state = 'unread', category = '') =>
+  (await api.get('/kept', { params: { state, category: category || undefined } })).data;
+export const updateKeptState = async (articleId, state) =>
+  (await api.patch(`/kept/${articleId}`, { state })).data;
+export const fetchKeptFulltext = async () => (await api.post('/kept/fulltext')).data;
+
+// Reader & full-text on demand
+export const getArticle = async (id) => (await api.get(`/articles/${id}`)).data;
+export const fetchArticleFulltext = async (id, { method = 'auto', force = false } = {}) =>
+  (await api.post(`/articles/${id}/fulltext`, { method, force })).data;
+export const articleThumbPath = (id) => `/articles/${id}/thumb`;
+
+// Sources & Categories
+export const getCategories = async () => (await api.get('/categories')).data;
+export const getSources = async () => (await api.get('/sources')).data;
+export const checkSource = async (url) => (await api.post('/sources/check', { url })).data;
+export const getCheckSource = async (id) => (await api.get(`/sources/check/${id}`)).data;
+export const createSource = async (data) => (await api.post('/sources', data)).data;
+export const updateSource = async (id, changes) => (await api.patch(`/sources/${id}`, changes)).data;
+export const deleteSource = async (id) => (await api.delete(`/sources/${id}`)).data;
+export const crawlSource = async (id, force = false) => (await api.post(`/sources/${id}/crawl`, { force })).data;
+export const crawlAll = async () => (await api.post('/crawl')).data;
+export const testFulltext = async (id) => (await api.post(`/sources/${id}/test-fulltext`)).data;
+
+// Crawl & Learning settings
+export const getCrawlSettings = async () => (await api.get('/settings/crawl')).data;
+export const updateCrawlSettings = async (changes) => (await api.put('/settings/crawl', changes)).data;
+export const getLearningSettings = async () => (await api.get('/settings/learning')).data;
 
 // Pictures sit behind the sign-in, so <img src> can't fetch them directly: load the bytes with the
 // access token and hand the <img> a blob URL (see components/AuthImage.jsx).
 export const fetchImageBlob = async (path) => (await api.get(path, { responseType: 'blob' })).data;
-export const imagePath = (id, size = 'full') => `/images/${id}/file${size === 'thumb' ? '?size=thumb' : ''}`;
+export const imagePath = (id, _size = 'full') => `/articles/${id}/thumb`;
 
 export default api;

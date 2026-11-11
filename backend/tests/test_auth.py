@@ -43,16 +43,16 @@ def test_login_lockout(make_user, anon_client):
 
 def test_refresh_rotation_and_reuse_detection(make_user):
     client, _ = make_user("rotator")
-    old_cookie = client.cookies.get("dose_refresh_token")
+    old_cookie = client.cookies.get("current_refresh_token")
     res = client.post("/api/v1/auth/refresh")
     assert res.status_code == 200
-    assert client.cookies.get("dose_refresh_token") != old_cookie
+    assert client.cookies.get("current_refresh_token") != old_cookie
 
     # Replaying the old (rotated-out) token revokes the whole session family.
     # Clear the jar first: a second cookie of the same name can sit next to the
     # new one, and which of the two gets sent depends on the HTTP client version.
     client.cookies.clear()
-    client.cookies.set("dose_refresh_token", old_cookie, path="/api/v1/auth")
+    client.cookies.set("current_refresh_token", old_cookie, path="/api/v1/auth")
     assert client.post("/api/v1/auth/refresh").status_code == 401
 
 

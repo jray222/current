@@ -1,6 +1,6 @@
 """Where the Anthropic key and model come from: the owner's stored settings
 (Settings -> AI, key encrypted) first, else ANTHROPIC_API_KEY / ANTHROPIC_MODEL
-from the environment. Nothing in Dose needs a key; callers fall back when
+from the environment. Nothing in Current needs a key; callers fall back when
 there isn't one."""
 from typing import Optional
 

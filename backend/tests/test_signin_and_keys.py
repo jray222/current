@@ -251,7 +251,7 @@ OTHER_KEY = Fernet.generate_key().decode()
 
 
 def _encrypted_everything(owner):
-    """One of every encrypted value Dose stores."""
+    """One of every encrypted value Current stores."""
     _, backup_codes = _enable_2fa(owner)
     assert owner.post("/api/v1/settings/ai", json={"anthropic_api_key": "sk-ant-test-key"}).status_code == 200
     with SessionLocal() as db:

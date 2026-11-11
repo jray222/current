@@ -1,5 +1,5 @@
 // Light / dark / follow the system. The choice is a per-device convenience, kept in localStorage.
-const KEY = 'dose:theme';
+const KEY = 'current:theme';
 
 export function getThemeChoice() {
   try {
