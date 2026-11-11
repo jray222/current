@@ -42,7 +42,7 @@ AD_HOSTS = frozenset({
     "bidswitch.net",
     "media.net",
     "indexexchange.com",
-    "yandex.ru/ads",
+    "yandex.ru",
 })
 
 # Boilerplate text phrases often found in article bodies to clean out

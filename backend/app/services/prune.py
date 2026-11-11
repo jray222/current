@@ -68,7 +68,14 @@ def prune_retention(db: Session) -> dict[str, int]:
     articles_pruned = len(to_delete)
     for art in to_delete:
         if art.thumb_path:
-            delete_image(art.thumb_path)
+            # Only unlink from disk if no other article references this thumbnail
+            other_ref = (
+                db.query(Article.id)
+                .filter(Article.thumb_path == art.thumb_path, Article.id != art.id)
+                .first()
+            )
+            if not other_ref:
+                delete_image(art.thumb_path)
         db.delete(art)
 
     db.commit()

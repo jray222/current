@@ -459,6 +459,7 @@ def get_me(user: User = Depends(get_current_user)):
 @router.post("/logout-all")
 def logout_all(request: Request, response: Response, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     db.query(RefreshToken).filter(RefreshToken.user_id == user.id).update({"revoked": True})
+    user.password_changed_at = _now()
     db.commit()
     response.delete_cookie(settings.REFRESH_COOKIE_NAME, path="/api/v1/auth")
     _log_event(db, request, "logout_all", user=user)

@@ -132,6 +132,11 @@ class HostThrottle:
                 sleep_needed = interval - elapsed
             else:
                 sleep_needed = 0.0
+            if len(self._last_call) > 2000:
+                # Evict oldest entries to prevent memory growth
+                oldest = sorted(self._last_call.items(), key=lambda it: it[1])[:500]
+                for k, _ in oldest:
+                    self._last_call.pop(k, None)
             self._last_call[host] = now + sleep_needed
 
         if sleep_needed > 0:
@@ -194,6 +199,10 @@ class RobotsCache:
             parser.allow_all = True
 
         with self._lock:
+            if len(self._cache) > 2000:
+                oldest_c = sorted(self._cache.items(), key=lambda it: it[1][0])[:500]
+                for k, _ in oldest_c:
+                    self._cache.pop(k, None)
             self._cache[host] = (now, parser)
 
         return parser.can_fetch(user_agent, url)

@@ -210,6 +210,8 @@ def apply_ai_categorization(
 
         chunk_by_id = {a.id: a for a in chunk}
         for assign in assignments:
+            if not isinstance(assign, dict):
+                continue
             art_id = assign.get("article_id")
             cat_key = assign.get("category_key")
             if art_id in chunk_by_id and cat_key in cat_map:

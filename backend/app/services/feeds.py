@@ -94,6 +94,9 @@ def parse_feed_bytes(content: bytes, fallback_url: str = "") -> tuple[dict[str, 
             link = urllib.parse.urljoin(fallback_url, link)
         if not link:
             continue
+        parsed_link = urllib.parse.urlparse(link)
+        if parsed_link.scheme not in ("http", "https"):
+            continue
 
         title = clean_html_snippet(e.get("title", "Untitled"))
         summary = clean_html_snippet(e.get("summary") or e.get("description") or "")

@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Optional
 from PIL import Image
 
+# Cap decompression bomb limit to 10 Megapixels for thumbnail generation
+Image.MAX_IMAGE_PIXELS = 10_000_000
+
 from app.config import settings
 from app.database import SessionLocal
 from app.models.news import Article
@@ -16,13 +19,16 @@ from app.services import job_queue
 
 def get_image_absolute_path(rel_path: str) -> Optional[Path]:
     """Resolves a relative image path, ensuring it stays strictly within the images directory."""
-    if not rel_path or ".." in rel_path:
+    if not rel_path or ".." in rel_path or "\x00" in rel_path:
         return None
-    base = settings.images_dir.resolve()
-    target = (base / rel_path).resolve()
-    if not str(target).startswith(str(base)):
+    try:
+        base = settings.images_dir.resolve()
+        target = (base / rel_path).resolve()
+        if not target.is_relative_to(base):
+            return None
+        return target
+    except (ValueError, OSError):
         return None
-    return target
 
 
 def process_and_save_image(image_bytes: bytes, household_id: int) -> Optional[str]:
