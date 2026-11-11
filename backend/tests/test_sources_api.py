@@ -194,3 +194,38 @@ def test_household_isolation(make_user):
 
     res = client_b.delete(f"/categories/{cat_a_id}")
     assert res.status_code == 404
+
+
+def test_api_v1_prefixed_endpoints(make_user):
+    client, user = make_user("v1_reader", "V1 Household")
+
+    # Categories via /api/v1/categories
+    res = client.get("/api/v1/categories")
+    assert res.status_code == 200
+    assert len(res.json()) >= 12
+
+    # Sources create & list via /api/v1/sources
+    res = client.post(
+        "/api/v1/sources",
+        json={
+            "url": "https://apnews.com/",
+            "name": "AP News",
+            "fetch_mode": "browser",
+        },
+    )
+    assert res.status_code == 201
+    source_id = res.json()["id"]
+
+    res = client.get("/api/v1/sources")
+    assert res.status_code == 200
+    assert len(res.json()) == 1
+    assert res.json()[0]["id"] == source_id
+
+    # Feed endpoints via /api/v1
+    res = client.get("/api/v1/frontpage")
+    assert res.status_code == 200
+    res = client.get("/api/v1/feed")
+    assert res.status_code == 200
+    res = client.get("/api/v1/kept")
+    assert res.status_code == 200
+

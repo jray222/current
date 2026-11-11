@@ -87,6 +87,14 @@ app.include_router(auth.router)
 
 _protected = [Depends(get_current_user)]
 app.include_router(settings_router.router, dependencies=_protected)
+
+# Canonical API endpoints prefixed with /api/v1 (used by the frontend and clients)
+app.include_router(sources.router, prefix="/api/v1", dependencies=_protected)
+app.include_router(articles.router, prefix="/api/v1", dependencies=_protected)
+app.include_router(feed.router, prefix="/api/v1", dependencies=_protected)
+app.include_router(user_settings.router, prefix="/api/v1", dependencies=_protected)
+
+# Root-level aliases for backward compatibility with root test routes
 app.include_router(sources.router, dependencies=_protected)
 app.include_router(articles.router, dependencies=_protected)
 app.include_router(feed.router, dependencies=_protected)
@@ -94,6 +102,7 @@ app.include_router(user_settings.router, dependencies=_protected)
 
 
 @app.get("/images/{household_id}/{filename}")
+@app.get("/api/v1/images/{household_id}/{filename}")
 def get_image(household_id: int, filename: str, user: User = Depends(get_current_user)):
     if user.household_id != household_id and not user.is_superuser:
         raise HTTPException(status_code=403, detail="Forbidden")
