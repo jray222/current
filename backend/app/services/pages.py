@@ -12,9 +12,9 @@ from app.services.feeds import clean_html_snippet
 from app.services.dedupe import canonical_url
 
 NON_ARTICLE_PATTERNS = re.compile(
-    r"/(category|categories|tag|tags|author|authors|user|users|topic|topics|"
+    r"/(category|categories|tag|tags|author|authors|user|users|topic|topics|hub|hubs|"
     r"login|signup|signin|signout|register|privacy|terms|about|contact|"
-    r"subscribe|search|feed|rss|wp-content|wp-admin|archive|pages?)(/|[-_.]|$)",
+    r"subscribe|search|feed|rss|newsletter|newsletters|wp-content|wp-admin|archive|pages?)(/|[-_.]|$)",
     re.IGNORECASE,
 )
 

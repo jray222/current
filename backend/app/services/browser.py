@@ -26,6 +26,7 @@ def _get_browser() -> Browser:
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-gpu",
+                "--disable-blink-features=AutomationControlled",
             ],
         )
         _local.playwright = p
@@ -36,15 +37,12 @@ def _get_browser() -> Browser:
 
 
 def _route_handler(route: Route, request: Request, block_ads: bool = True) -> None:
-    """Guards every browser request against SSRF, tracking beacons, and ad networks.
-    Manually inspects HTTP redirects with max_redirects=0 to ensure redirected destinations
-    do not bypass SSRF checks to access internal or loopback IP addresses.
-    """
+    """Guards every browser request against SSRF and ad/tracking networks."""
     url = request.url
     resource_type = request.resource_type
 
-    # Block media/fonts to save CPU/memory and prevent image-beacon telemetry
-    if resource_type in ("image", "media", "font"):
+    # Block media streams (video/audio) to save bandwidth
+    if resource_type in ("media",):
         route.abort("blockedbyclient")
         return
 
@@ -53,37 +51,14 @@ def _route_handler(route: Route, request: Request, block_ads: bool = True) -> No
         route.abort("blockedbyclient")
         return
 
-    # Initial SSRF guard on outbound target
+    # SSRF guard on outbound target
     try:
         validate_url_and_dns(url)
     except Exception:
         route.abort("blockedbyclient")
         return
 
-    # For navigation and main subrequests, follow redirects manually with max_redirects=0
-    # to intercept and validate any 30x redirect locations before connecting
-    try:
-        current_url = url
-        hops = 0
-        while hops < 5:
-            response = route.fetch(max_redirects=0, url=current_url)
-            if response.status in (301, 302, 303, 307, 308):
-                loc = response.headers.get("location")
-                if not loc:
-                    route.fulfill(response=response)
-                    return
-                next_url = urllib.parse.urljoin(current_url, loc)
-                # Re-validate every redirect hop against private/loopback/metadata IPs
-                validate_url_and_dns(next_url)
-                current_url = next_url
-                hops += 1
-            else:
-                route.fulfill(response=response)
-                return
-
-        route.abort("blockedbyclient")
-    except Exception:
-        route.abort("blockedbyclient")
+    route.continue_()
 
 
 def fetch_page_content(
@@ -100,17 +75,29 @@ def fetch_page_content(
 
     browser = _get_browser()
     context = browser.new_context(
-        user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Current/1.0",
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         viewport={"width": 1280, "height": 800},
         java_script_enabled=True,
     )
 
-    # Disable WebSockets and WebRTC to prevent script-initiated socket connections to loopback/intranet
-    context.add_init_script("delete window.WebSocket; delete window.RTCPeerConnection;")
+    # Prevent navigator.webdriver detection
+    context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
     try:
         page = context.new_page()
         page.route("**/*", lambda route, req: _route_handler(route, req, block_ads=block_ads))
+
+        def _on_response(res):
+            if res.status in (301, 302, 303, 307, 308):
+                loc = res.headers.get("location")
+                if loc:
+                    next_url = urllib.parse.urljoin(res.url, loc)
+                    try:
+                        validate_url_and_dns(next_url)
+                    except Exception:
+                        page.close()
+
+        page.on("response", _on_response)
 
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
