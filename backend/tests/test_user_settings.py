@@ -55,3 +55,37 @@ def test_learning_settings_api(make_user):
     reset_res = client.post("/settings/learning/reset")
     assert reset_res.status_code == 200
     assert reset_res.json()["n_votes"] == 0
+
+
+def test_feed_settings_api(make_user):
+    client, user = make_user("feed_prefs_user")
+
+    # 1. Get default feed settings
+    res = client.get("/api/v1/settings/feed")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["category_order"] == []
+    assert data["excluded_categories"] == []
+    assert data["preview_lines"] == 2
+
+    # 2. Update feed settings
+    patch_res = client.patch(
+        "/api/v1/settings/feed",
+        json={
+            "category_order": ["tech", "world"],
+            "excluded_categories": ["sports"],
+            "preview_lines": 3,
+        },
+    )
+    assert patch_res.status_code == 200
+    updated = patch_res.json()
+    assert updated["category_order"] == ["tech", "world"]
+    assert updated["excluded_categories"] == ["sports"]
+    assert updated["preview_lines"] == 3
+
+    # 3. Read back
+    res2 = client.get("/api/v1/settings/feed")
+    assert res2.status_code == 200
+    assert res2.json()["preview_lines"] == 3
+    assert res2.json()["excluded_categories"] == ["sports"]
+

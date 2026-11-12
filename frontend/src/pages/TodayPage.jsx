@@ -1,12 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Rss, CheckCircle2 } from 'lucide-react';
-import { getFrontpage, getFeed, getCategories, postVote, undoVote, crawlAll } from '../api';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { RefreshCw, Rss, CheckCircle2, SlidersHorizontal } from 'lucide-react';
+import {
+  getFrontpage,
+  getFeed,
+  getCategories,
+  postVote,
+  undoVote,
+  crawlAll,
+  getFeedSettings,
+} from '../api';
 import { navigate, onLinkClick } from '../lib/router';
+import { saveScrollPosition, restoreScrollPosition } from '../lib/scroll';
 import CategoryNav from '../components/CategoryNav';
 import LeadStoryCard from '../components/LeadStoryCard';
 import CategorySection from '../components/CategorySection';
 import ArticleRow from '../components/ArticleRow';
 import UndoToast from '../components/UndoToast';
+import FeedCustomizeSheet from '../components/FeedCustomizeSheet';
 
 export default function TodayPage() {
   const [categories, setCategories] = useState([]);
@@ -15,6 +25,20 @@ export default function TodayPage() {
   const [categoryArticles, setCategoryArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [crawling, setCrawling] = useState(false);
+  const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+  const [feedSettings, setFeedSettings] = useState({
+    category_order: [],
+    excluded_categories: [],
+    preview_lines: 2,
+  });
+  const [openedArticleIds, setOpenedArticleIds] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('current:opened_ids') || '[]');
+      return new Set(saved);
+    } catch {
+      return new Set();
+    }
+  });
   const [undoState, setUndoState] = useState(null); // { articleId, title, verdict }
   const [formattedDate] = useState(() =>
     new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
@@ -23,12 +47,16 @@ export default function TodayPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [catsRes, fpRes] = await Promise.all([
+      const [catsRes, fpRes, settingsRes] = await Promise.all([
         getCategories(),
         getFrontpage(),
+        getFeedSettings().catch(() => null),
       ]);
       setCategories(catsRes);
       setFrontpage(fpRes);
+      if (settingsRes) {
+        setFeedSettings(settingsRes);
+      }
     } catch (err) {
       console.error('Failed to load front page data:', err);
     } finally {
@@ -39,6 +67,13 @@ export default function TodayPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Restore scroll position after content finishes loading
+  useEffect(() => {
+    if (!loading) {
+      restoreScrollPosition('/');
+    }
+  }, [loading]);
 
   // When a specific category is selected, fetch that category's feed
   useEffect(() => {
@@ -68,6 +103,30 @@ export default function TodayPage() {
     } catch {
       setCrawling(false);
     }
+  };
+
+  const markArticleOpened = (articleId) => {
+    setOpenedArticleIds((prev) => {
+      const next = new Set(prev);
+      next.add(articleId);
+      try {
+        localStorage.setItem('current:opened_ids', JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    postVote(articleId, 'open').catch(() => {});
+  };
+
+  const handleOpenReader = (articleId) => {
+    saveScrollPosition('/');
+    markArticleOpened(articleId);
+    navigate(`/reader/${articleId}`);
+  };
+
+  const handleOpenOriginal = (article) => {
+    markArticleOpened(article.id);
   };
 
   const handleSwipe = async (articleId, verdict) => {
@@ -100,10 +159,12 @@ export default function TodayPage() {
         setFrontpage((prev) => {
           if (!prev) return prev;
           const newLead = prev.lead_story?.id === articleId ? null : prev.lead_story;
-          const newSections = prev.sections.map((sec) => ({
-            ...sec,
-            articles: sec.articles.filter((a) => a.id !== articleId),
-          })).filter((sec) => sec.articles.length > 0);
+          const newSections = prev.sections
+            .map((sec) => ({
+              ...sec,
+              articles: sec.articles.filter((a) => a.id !== articleId),
+            }))
+            .filter((sec) => sec.articles.length > 0);
           return { lead_story: newLead, sections: newSections };
         });
       }
@@ -124,9 +185,11 @@ export default function TodayPage() {
     }
   };
 
-  const handleOpenReader = (articleId) => {
-    navigate(`/reader/${articleId}`);
-  };
+  // Nav categories filter out user exclusions
+  const visibleNavCategories = useMemo(() => {
+    const excluded = new Set(feedSettings.excluded_categories || []);
+    return categories.filter((c) => !excluded.has(c.key));
+  }, [categories, feedSettings.excluded_categories]);
 
   const hasContent = selectedCategory
     ? categoryArticles.length > 0
@@ -146,25 +209,32 @@ export default function TodayPage() {
             Today’s Edition
           </h1>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="hidden md:inline-block text-[11px] text-ink-400 dark:text-ink-500 italic">
-            Swipe right to keep • Swipe left to dismiss
-          </span>
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsCustomizeOpen(true)}
+            className="inline-flex items-center gap-1.5 bg-white dark:bg-ink-900 border border-cream-300 dark:border-ink-700 hover:border-brand-500 hover:text-brand-700 dark:hover:border-volt-400 dark:hover:text-volt-400 text-xs font-bold px-3 py-2 rounded-xl text-ink-800 dark:text-cream-100 shadow-xs transition-all active:scale-95"
+            title="Customize feed topics and preview text"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-brand-600 dark:text-volt-400" />
+            <span>Customize</span>
+          </button>
+
           <button
             type="button"
             onClick={handleCrawlNow}
             disabled={crawling}
-            className="inline-flex items-center gap-2 bg-white dark:bg-ink-900 border border-cream-300 dark:border-ink-700 hover:border-brand-500 hover:text-brand-700 dark:hover:border-volt-400 dark:hover:text-volt-400 text-xs font-bold px-4 py-2 rounded-xl text-ink-800 dark:text-cream-100 shadow-xs transition-all active:scale-95"
+            className="inline-flex items-center gap-1.5 bg-white dark:bg-ink-900 border border-cream-300 dark:border-ink-700 hover:border-brand-500 hover:text-brand-700 dark:hover:border-volt-400 dark:hover:text-volt-400 text-xs font-bold px-3 py-2 rounded-xl text-ink-800 dark:text-cream-100 shadow-xs transition-all active:scale-95"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-brand-600 dark:text-volt-400 ${crawling ? 'animate-spin' : ''}`} />
-            <span>{crawling ? 'Checking feeds…' : 'Sync feeds'}</span>
+            <span>{crawling ? 'Checking…' : 'Sync feeds'}</span>
           </button>
         </div>
       </div>
 
-      {/* Sticky Category Bar */}
+      {/* Sticky Category Ribbon (Sorted and filtered per user preferences) */}
       <CategoryNav
-        categories={categories}
+        categories={visibleNavCategories}
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
       />
@@ -225,6 +295,9 @@ export default function TodayPage() {
                 article={article}
                 onSwipe={handleSwipe}
                 onOpenReader={handleOpenReader}
+                onOpenOriginal={handleOpenOriginal}
+                previewLines={feedSettings.preview_lines}
+                isOpened={openedArticleIds.has(article.id) || Boolean(article.is_opened)}
               />
             ))}
           </div>
@@ -237,6 +310,8 @@ export default function TodayPage() {
                 article={frontpage.lead_story}
                 onSwipe={handleSwipe}
                 onOpenReader={handleOpenReader}
+                onOpenOriginal={handleOpenOriginal}
+                isOpened={openedArticleIds.has(frontpage.lead_story.id) || Boolean(frontpage.lead_story.is_opened)}
               />
             )}
 
@@ -248,12 +323,27 @@ export default function TodayPage() {
                 articles={section.articles}
                 onSwipe={handleSwipe}
                 onOpenReader={handleOpenReader}
+                onOpenOriginal={handleOpenOriginal}
                 onSelectCategory={setSelectedCategory}
+                previewLines={feedSettings.preview_lines}
+                openedArticleIds={openedArticleIds}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Feed Customization Sheet */}
+      <FeedCustomizeSheet
+        isOpen={isCustomizeOpen}
+        onClose={() => setIsCustomizeOpen(false)}
+        allCategories={categories}
+        currentSettings={feedSettings}
+        onSettingsSaved={(newSettings) => {
+          setFeedSettings(newSettings);
+          loadData();
+        }}
+      />
 
       {/* Undo Toast */}
       {undoState && (

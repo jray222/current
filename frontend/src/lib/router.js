@@ -1,13 +1,24 @@
 // A very small history-based router: Current has a handful of pages, so a library isn't worth it.
 import { useCallback, useEffect, useState } from 'react';
+import { saveScrollPosition } from './scroll';
 
 const listeners = new Set();
 
 export function navigate(path, { replace = false } = {}) {
   if (path === window.location.pathname + window.location.search) return;
+  saveScrollPosition(window.location.pathname);
   window.history[replace ? 'replaceState' : 'pushState'](null, '', path);
   listeners.forEach((fn) => fn());
   window.scrollTo({ top: 0 });
+}
+
+export function navigateBack(fallbackPath = '/') {
+  saveScrollPosition(window.location.pathname);
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    navigate(fallbackPath);
+  }
 }
 
 /** The current path and query string; re-renders on navigation, back and forward. */

@@ -54,6 +54,7 @@ class FeedArticleItem(BaseModel):
     predicted_score: float = 0.5
     text_status: str
     word_count: int
+    is_opened: bool = False
 
 
 class FrontPageSection(BaseModel):
@@ -89,12 +90,14 @@ def _group_stories_and_build_items(
     ranked_articles: list[tuple[Article, float]],
     sources_by_id: dict[int, Source],
     categories_by_id: dict[int, Category],
+    opened_ids: Optional[set[int]] = None,
 ) -> list[FeedArticleItem]:
     """Groups multiple articles on the same story, keeping the highest-ranked article
     as primary and listing others in `also_in`.
     """
     story_map: dict[str, FeedArticleItem] = {}
     items: list[FeedArticleItem] = []
+    opened_set = opened_ids or set()
 
     for art, score in ranked_articles:
         src = sources_by_id.get(art.source_id)
@@ -138,6 +141,7 @@ def _group_stories_and_build_items(
                 predicted_score=round(score, 4),
                 text_status=art.text_status,
                 word_count=art.word_count,
+                is_opened=bool(art.id in opened_set),
             )
             story_map[art.story_id] = item
             items.append(item)
@@ -156,28 +160,59 @@ def get_frontpage(
 ):
     category_service.seed_all(db, user.household_id)
 
+    feed_prefs = user.feed_preferences or {}
+    category_order = feed_prefs.get("category_order", [])
+    excluded_set = set(feed_prefs.get("excluded_categories", []))
+
     # 1. Fetch categories for user
     categories = (
         db.query(Category)
         .filter(Category.household_id == user.household_id, Category.hidden == 0)
-        .order_by(Category.sort_order.asc(), Category.id.asc())
         .all()
     )
+
+    # Filter out categories excluded by user
+    if excluded_set:
+        categories = [c for c in categories if c.key not in excluded_set]
+
+    # Sort categories according to user custom order if set, else Category.sort_order
+    if category_order:
+        order_map = {k: i for i, k in enumerate(category_order)}
+        categories.sort(key=lambda c: (order_map.get(c.key, 999), c.sort_order, c.id))
+    else:
+        categories.sort(key=lambda c: (c.sort_order, c.id))
+
     categories_by_id = {c.id: c for c in categories}
 
-    # 2. Subquery: articles already voted on by this user
-    voted_ids = (
+    # 2. Subquery: articles already triaged (keep or skip) by this user
+    triaged_ids = (
         db.query(Vote.article_id)
-        .filter(Vote.user_id == user.id, Vote.article_id.isnot(None))
+        .filter(
+            Vote.user_id == user.id,
+            Vote.article_id.isnot(None),
+            Vote.verdict.in_(["keep", "skip"]),
+        )
         .scalar_subquery()
     )
+
+    # Opened article IDs for visual read state
+    opened_rows = (
+        db.query(Vote.article_id)
+        .filter(
+            Vote.user_id == user.id,
+            Vote.article_id.isnot(None),
+            Vote.verdict == "open",
+        )
+        .all()
+    )
+    opened_ids = {row[0] for row in opened_rows}
 
     # 3. Candidate unvoted articles for this household
     articles = (
         db.query(Article)
         .filter(
             Article.household_id == user.household_id,
-            ~Article.id.in_(voted_ids),
+            ~Article.id.in_(triaged_ids),
         )
         .order_by(Article.discovered_at.desc())
         .limit(300)
@@ -196,7 +231,7 @@ def get_frontpage(
     ranked = interest.rank_articles_for_user(
         db, user.id, user.household_id, articles, sources_by_id, categories_by_id
     )
-    all_story_items = _group_stories_and_build_items(ranked, sources_by_id, categories_by_id)
+    all_story_items = _group_stories_and_build_items(ranked, sources_by_id, categories_by_id, opened_ids=opened_ids)
 
     if not all_story_items:
         return FrontPageResponse(lead_story=None, sections=[])
@@ -270,15 +305,19 @@ def get_category_feed(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    voted_ids = (
+    triaged_ids = (
         db.query(Vote.article_id)
-        .filter(Vote.user_id == user.id, Vote.article_id.isnot(None))
+        .filter(
+            Vote.user_id == user.id,
+            Vote.article_id.isnot(None),
+            Vote.verdict.in_(["keep", "skip"]),
+        )
         .scalar_subquery()
     )
 
     query = db.query(Article).filter(
         Article.household_id == user.household_id,
-        ~Article.id.in_(voted_ids),
+        ~Article.id.in_(triaged_ids),
     )
 
     target_cat_id = None
@@ -303,10 +342,21 @@ def get_category_feed(
     categories = db.query(Category).filter(Category.household_id == user.household_id).all()
     categories_by_id = {c.id: c for c in categories}
 
+    opened_rows = (
+        db.query(Vote.article_id)
+        .filter(
+            Vote.user_id == user.id,
+            Vote.article_id.isnot(None),
+            Vote.verdict == "open",
+        )
+        .all()
+    )
+    opened_ids = {row[0] for row in opened_rows}
+
     ranked = interest.rank_articles_for_user(
         db, user.id, user.household_id, articles, sources_by_id, categories_by_id
     )
-    items = _group_stories_and_build_items(ranked, sources_by_id, categories_by_id)
+    items = _group_stories_and_build_items(ranked, sources_by_id, categories_by_id, opened_ids=opened_ids)
     return items[offset : offset + limit]
 
 

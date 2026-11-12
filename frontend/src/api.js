@@ -242,6 +242,8 @@ export const updateKeptState = async (articleId, keptState) =>
 export const getArticle = async (id) => (await api.get(`/articles/${id}`)).data;
 export const fetchArticleFulltext = async (id, { force = false, sync = true } = {}) =>
   (await api.post(`/articles/${id}/fetch-text`, null, { params: { force, sync } })).data;
+export const openArticleByUrl = async (payload) =>
+  (await api.post('/articles/open-by-url', payload)).data;
 
 // Sources & Categories
 export const getCategories = async () => (await api.get('/categories')).data;
@@ -258,13 +260,15 @@ export const crawlSource = async (id, force = false) => (await api.post(`/source
 export const crawlAll = async () => (await api.post('/crawl')).data;
 export const getSourceRuns = async (id) => (await api.get(`/sources/${id}/runs`)).data;
 
-// Crawl & Learning settings
+// Crawl, Learning & Feed settings
 export const getCrawlSettings = async () => (await api.get('/settings/crawl')).data;
 export const updateCrawlSettings = async (changes) => (await api.patch('/settings/crawl', changes)).data;
 export const getLearningSettings = async () => (await api.get('/settings/learning')).data;
 export const muteLearningTerm = async (term) => (await api.post('/settings/learning/mute', { term })).data;
 export const unmuteLearningTerm = async (term) => (await api.delete(`/settings/learning/mute/${encodeURIComponent(term)}`)).data;
 export const resetLearningModel = async () => (await api.post('/settings/learning/reset')).data;
+export const getFeedSettings = async () => (await api.get('/settings/feed')).data;
+export const updateFeedSettings = async (changes) => (await api.patch('/settings/feed', changes)).data;
 
 // Pictures sit behind the sign-in: load the bytes with the access token and hand the <img> a blob URL
 export const fetchImageBlob = async (path) => (await api.get(path, { responseType: 'blob' })).data;

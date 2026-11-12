@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bookmark, Trash2, Layers, Clock } from 'lucide-react';
+import { Bookmark, Trash2, Layers, Clock, ExternalLink } from 'lucide-react';
 import { useSwipeRow } from '../lib/useSwipeRow';
 import AuthImage from './AuthImage';
 
@@ -18,7 +18,15 @@ function formatRelativeTime(dateStr) {
   }
 }
 
-export default function LeadStoryCard({ article, onSwipe, onOpenReader }) {
+export default function LeadStoryCard({
+  article,
+  onSwipe,
+  onOpenReader,
+  onOpenOriginal,
+  isOpened = false,
+}) {
+  const opened = isOpened || Boolean(article?.is_opened);
+
   const { rowRef, offsetX, isDragging, isCollapsing, swipeAction, handlers } = useSwipeRow({
     onSwipeRight: () => onSwipe(article.id, 'keep'),
     onSwipeLeft: () => onSwipe(article.id, 'skip'),
@@ -59,11 +67,13 @@ export default function LeadStoryCard({ article, onSwipe, onOpenReader }) {
           transform: `translateX(${offsetX}px)`,
           transition: isDragging ? 'none' : 'transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
         }}
-        className="group relative bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 rounded-3xl shadow-sm hover:shadow-lg transition-all cursor-pointer select-none overflow-hidden"
+        className={`group relative bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 rounded-3xl shadow-sm hover:shadow-lg transition-all cursor-pointer select-none overflow-hidden ${
+          opened ? 'opacity-65 dark:opacity-55' : 'opacity-100'
+        }`}
       >
         {/* Lead Image */}
         {(article.thumb_path || article.image_remote_url) && (
-          <div className="relative aspect-[16/9] sm:aspect-[21/9] w-full overflow-hidden bg-cream-200 dark:bg-ink-800">
+          <div className={`relative aspect-[16/9] sm:aspect-[21/9] w-full overflow-hidden bg-cream-200 dark:bg-ink-800 ${opened ? 'grayscale-[30%]' : ''}`}>
             {article.thumb_path ? (
               <AuthImage
                 path={`/images/${article.thumb_path}`}
@@ -83,29 +93,60 @@ export default function LeadStoryCard({ article, onSwipe, onOpenReader }) {
             <div className="absolute top-4 left-4 bg-brand-700/90 dark:bg-volt-500/90 backdrop-blur-md text-white dark:text-ink-950 px-3 py-1 rounded-full text-[11px] font-black tracking-widest uppercase shadow-xs">
               Top Story
             </div>
+            {opened && (
+              <div className="absolute top-4 right-4 bg-ink-900/80 backdrop-blur-md text-cream-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                Read
+              </div>
+            )}
           </div>
         )}
 
         <div className="p-5 sm:p-7">
           {/* Metadata Bar */}
-          <div className="flex items-center gap-2 text-xs text-ink-500 dark:text-ink-400 mb-2.5">
-            {article.source_favicon ? (
-              <img src={article.source_favicon} alt="" className="w-4 h-4 rounded-xs shrink-0" />
-            ) : (
-              <div className="w-4 h-4 rounded-xs bg-brand-700/10 text-brand-700 dark:text-volt-400 flex items-center justify-center font-bold text-[9px] shrink-0">
-                {article.source_name?.[0] || 'N'}
+          <div className="flex items-center justify-between text-xs text-ink-500 dark:text-ink-400 mb-2.5">
+            <div className="flex items-center gap-2 min-w-0 pr-2">
+              {article.source_favicon ? (
+                <img src={article.source_favicon} alt="" className="w-4 h-4 rounded-xs shrink-0" />
+              ) : (
+                <div className="w-4 h-4 rounded-xs bg-brand-700/10 text-brand-700 dark:text-volt-400 flex items-center justify-center font-bold text-[9px] shrink-0">
+                  {article.source_name?.[0] || 'N'}
+                </div>
+              )}
+              <span className="font-bold text-ink-900 dark:text-cream-100">{article.source_name}</span>
+              <span>•</span>
+              <div className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-ink-400" />
+                <span>{formatRelativeTime(article.published_at || article.discovered_at)}</span>
               </div>
-            )}
-            <span className="font-bold text-ink-900 dark:text-cream-100">{article.source_name}</span>
-            <span>•</span>
-            <div className="flex items-center gap-1">
-              <Clock className="w-3 h-3 text-ink-400" />
-              <span>{formatRelativeTime(article.published_at || article.discovered_at)}</span>
             </div>
+
+            {article.url && (
+              <a
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenOriginal?.(article);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-cream-100 dark:bg-ink-800 text-ink-700 dark:text-ink-300 hover:text-brand-700 dark:hover:text-volt-400 hover:bg-cream-200 dark:hover:bg-ink-700 transition-colors shrink-0"
+                title="Open original article on publisher website"
+              >
+                <span>Original</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
 
           {/* Headline */}
-          <h2 className="font-serif font-black text-xl sm:text-3xl text-ink-950 dark:text-cream-50 leading-tight mb-2.5 group-hover:text-brand-700 dark:group-hover:text-volt-400 transition-colors">
+          <h2
+            className={`font-serif text-xl sm:text-3xl leading-tight mb-2.5 transition-colors ${
+              opened
+                ? 'font-medium text-ink-600 dark:text-ink-400'
+                : 'font-black text-ink-950 dark:text-cream-50 group-hover:text-brand-700 dark:group-hover:text-volt-400'
+            }`}
+          >
             {article.title}
           </h2>
 

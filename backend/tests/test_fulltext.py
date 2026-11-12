@@ -184,3 +184,34 @@ def test_articles_api(make_user, monkeypatch):
 
     res_b_fetch = client_b.post(f"/articles/{art_id}/fetch-text")
     assert res_b_fetch.status_code == 404
+
+
+def test_collection_blocks_extraction():
+    collection_html = """<!DOCTYPE html>
+    <html><body><main>
+      <h1>Beyond the Headlines: Curated stories</h1>
+      <div class="PagePromo">
+        <h2 class="PagePromo-title"><a href="https://apnews.com/article/sub-story-1">First Major Investigative Story in This Curated Roundup</a></h2>
+        <div class="PagePromo-description">Teaser description for story one with enough details.</div>
+      </div>
+      <div class="PagePromo">
+        <h2 class="PagePromo-title"><a href="https://apnews.com/article/sub-story-2">Second In-Depth Dispatch From Regional Correspondents</a></h2>
+        <div class="PagePromo-description">Teaser description for story two with enough details.</div>
+      </div>
+      <div class="PagePromo">
+        <h2 class="PagePromo-title"><a href="https://apnews.com/article/sub-story-3">Third Feature Article Covering Cultural Phenomena Worldwide</a></h2>
+        <div class="PagePromo-description">Teaser description for story three with enough details.</div>
+      </div>
+    </main></body></html>
+    """
+    blocks = to_blocks_from_html(collection_html, page_url="https://apnews.com/hub/beyond-the-headlines")
+    assert len(blocks) >= 3
+    types = [b["t"] for b in blocks]
+    assert "collection_header" in types
+    story_cards = [b for b in blocks if b["t"] == "story_card"]
+    assert len(story_cards) == 3
+    assert "First Major Investigative Story" in story_cards[0]["title"]
+    assert story_cards[0]["url"] == "https://apnews.com/article/sub-story-1"
+    assert "Teaser description for story one" in story_cards[0]["summary"]
+
+

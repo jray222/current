@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Bookmark, ExternalLink, RefreshCw, Clock, Share2, Check } from 'lucide-react';
-import { getArticle, fetchArticleFulltext, postVote } from '../api';
-import { onLinkClick } from '../lib/router';
+import { getArticle, fetchArticleFulltext, postVote, openArticleByUrl } from '../api';
+import { navigate, navigateBack } from '../lib/router';
 import AuthImage from '../components/AuthImage';
 import ArticleBody from '../components/ArticleBody';
 import TextStatus from '../components/TextStatus';
@@ -26,6 +26,7 @@ export default function ReaderPage({ id }) {
   const [article, setArticle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchingText, setFetchingText] = useState(false);
+  const [openingStoryUrl, setOpeningStoryUrl] = useState(null);
   const [isKept, setIsKept] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -36,6 +37,18 @@ export default function ReaderPage({ id }) {
       const data = await getArticle(id);
       setArticle(data);
       setIsKept(data.user_vote === 'keep');
+
+      // Record visual opened state & train interest model implicitly
+      try {
+        const opened = JSON.parse(localStorage.getItem('current:opened_ids') || '[]');
+        if (!opened.includes(data.id)) {
+          opened.push(data.id);
+          localStorage.setItem('current:opened_ids', JSON.stringify(opened));
+        }
+        postVote(data.id, 'open').catch(() => {});
+      } catch {
+        // ignore storage errors
+      }
 
       // Auto-fetch text on open if none yet
       if (data.text_status === 'none') {
@@ -59,6 +72,31 @@ export default function ReaderPage({ id }) {
   useEffect(() => {
     loadArticle();
   }, [loadArticle]);
+
+  const handleOpenStory = async (story) => {
+    if (!story?.url) return;
+    setOpeningStoryUrl(story.url);
+    try {
+      const res = await openArticleByUrl({
+        url: story.url,
+        title: story.title,
+        summary: story.summary,
+        image_remote_url: story.image,
+        source_id: article?.source_id,
+        category_id: article?.category_id,
+      });
+      if (res?.id) {
+        navigate(`/reader/${res.id}`);
+      } else {
+        window.open(story.url, '_blank');
+      }
+    } catch (err) {
+      console.error('Failed to open sub-story:', err);
+      window.open(story.url, '_blank');
+    } finally {
+      setOpeningStoryUrl(null);
+    }
+  };
 
   const handleToggleKeep = async () => {
     if (!article) return;
@@ -126,14 +164,14 @@ export default function ReaderPage({ id }) {
     <article className="max-w-3xl mx-auto pb-20">
       {/* Top Action Bar */}
       <div className="sticky top-0 z-20 bg-cream-50/95 dark:bg-ink-950/95 backdrop-blur-md py-3 border-b border-cream-200 dark:border-ink-800 flex items-center justify-between mb-6">
-        <a
-          href="/"
-          onClick={onLinkClick('/')}
+        <button
+          type="button"
+          onClick={() => navigateBack('/')}
           className="flex items-center gap-1.5 text-xs font-semibold text-ink-700 dark:text-ink-300 hover:text-brand-700 dark:hover:text-volt-400 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Edition</span>
-        </a>
+        </button>
 
         <div className="flex items-center gap-2">
           <button
@@ -234,7 +272,11 @@ export default function ReaderPage({ id }) {
 
       {/* Article Content */}
       {article.text_blocks && article.text_blocks.length > 0 ? (
-        <ArticleBody blocks={article.text_blocks} />
+        <ArticleBody
+          blocks={article.text_blocks}
+          onOpenStory={handleOpenStory}
+          openingStoryUrl={openingStoryUrl}
+        />
       ) : article.summary ? (
         <div className="prose dark:prose-invert max-w-none text-base sm:text-lg leading-relaxed text-ink-800 dark:text-cream-200">
           <p>{article.summary}</p>

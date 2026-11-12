@@ -41,6 +41,18 @@ class LearningSettingsRead(BaseModel):
     muted_terms: list[str]
 
 
+class FeedSettingsRead(BaseModel):
+    category_order: list[str] = Field(default_factory=list)
+    excluded_categories: list[str] = Field(default_factory=list)
+    preview_lines: int = 2
+
+
+class FeedSettingsUpdate(BaseModel):
+    category_order: Optional[list[str]] = None
+    excluded_categories: Optional[list[str]] = None
+    preview_lines: Optional[int] = Field(None, ge=0, le=4)
+
+
 class MuteTermPayload(BaseModel):
     term: str = Field(..., min_length=1, max_length=100)
 
@@ -164,3 +176,35 @@ def reset_learning_model(
     db.commit()
 
     return get_learning_settings(user, db)
+
+
+@router.get("/feed", response_model=FeedSettingsRead)
+def get_feed_settings(
+    user: User = Depends(get_current_user),
+):
+    prefs = user.feed_preferences or {}
+    return FeedSettingsRead(
+        category_order=prefs.get("category_order", []),
+        excluded_categories=prefs.get("excluded_categories", []),
+        preview_lines=prefs.get("preview_lines", 2),
+    )
+
+
+@router.patch("/feed", response_model=FeedSettingsRead)
+def update_feed_settings(
+    payload: FeedSettingsUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    prefs = dict(user.feed_preferences or {})
+    if payload.category_order is not None:
+        prefs["category_order"] = payload.category_order
+    if payload.excluded_categories is not None:
+        prefs["excluded_categories"] = payload.excluded_categories
+    if payload.preview_lines is not None:
+        prefs["preview_lines"] = payload.preview_lines
+
+    user.feed_preferences = prefs
+    db.commit()
+    return get_feed_settings(user)
+

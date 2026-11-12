@@ -36,7 +36,10 @@ export default function CategorySection({
   articles = [],
   onSwipe,
   onOpenReader,
+  onOpenOriginal,
   onSelectCategory,
+  previewLines = 2,
+  openedArticleIds = new Set(),
 }) {
   if (!articles || articles.length === 0) return null;
 
@@ -72,6 +75,9 @@ export default function CategorySection({
             article={article}
             onSwipe={onSwipe}
             onOpenReader={onOpenReader}
+            onOpenOriginal={onOpenOriginal}
+            previewLines={previewLines}
+            isOpened={openedArticleIds.has(article.id) || Boolean(article.is_opened)}
           />
         ))}
       </div>

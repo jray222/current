@@ -36,6 +36,7 @@ class CategoryRead(BaseModel):
     sort_order: int
     hidden: int
     unread_count: int = 0
+    is_excluded: bool = False
 
 
 class CategoryCreate(BaseModel):
@@ -144,17 +145,30 @@ def list_categories(
     db: Session = Depends(get_db),
 ):
     category_service.seed_all(db, user.household_id)
+    feed_prefs = user.feed_preferences or {}
+    category_order = feed_prefs.get("category_order", [])
+    excluded_set = set(feed_prefs.get("excluded_categories", []))
+
     categories = (
         db.query(Category)
         .filter(Category.household_id == user.household_id)
-        .order_by(Category.sort_order.asc(), Category.id.asc())
         .all()
     )
 
-    # Subquery: articles already voted on by this user
-    voted_ids = (
+    if category_order:
+        order_map = {k: i for i, k in enumerate(category_order)}
+        categories.sort(key=lambda c: (order_map.get(c.key, 999), c.sort_order, c.id))
+    else:
+        categories.sort(key=lambda c: (c.sort_order, c.id))
+
+    # Subquery: articles already triaged (keep or skip) by this user
+    triaged_ids = (
         db.query(Vote.article_id)
-        .filter(Vote.user_id == user.id, Vote.article_id.isnot(None))
+        .filter(
+            Vote.user_id == user.id,
+            Vote.article_id.isnot(None),
+            Vote.verdict.in_(["keep", "skip"]),
+        )
         .scalar_subquery()
     )
 
@@ -163,7 +177,7 @@ def list_categories(
         db.query(Article.category_id, func.count(Article.id))
         .filter(
             Article.household_id == user.household_id,
-            ~Article.id.in_(voted_ids),
+            ~Article.id.in_(triaged_ids),
         )
         .group_by(Article.category_id)
         .all()
@@ -181,6 +195,7 @@ def list_categories(
                 sort_order=c.sort_order,
                 hidden=c.hidden,
                 unread_count=counts.get(c.id, 0),
+                is_excluded=c.key in excluded_set,
             )
         )
     return results

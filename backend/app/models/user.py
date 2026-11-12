@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+import json
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.database import Base
@@ -53,12 +54,28 @@ class User(Base):
     last_login_at = Column(DateTime, nullable=True)
     last_login_ip = Column(String(64), nullable=True)
 
+    # Personal feed preferences (category order, excluded categories, preview density)
+    feed_preferences_raw = Column("feed_preferences", Text, default="{}")
+
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     household = relationship("Household", back_populates="users")
     backup_codes = relationship("BackupCode", back_populates="user", cascade="all, delete-orphan")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def feed_preferences(self) -> dict:
+        if not self.feed_preferences_raw:
+            return {}
+        try:
+            return json.loads(self.feed_preferences_raw)
+        except Exception:
+            return {}
+
+    @feed_preferences.setter
+    def feed_preferences(self, val: dict) -> None:
+        self.feed_preferences_raw = json.dumps(val or {})
 
 
 class BackupCode(Base):
