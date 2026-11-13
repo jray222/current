@@ -69,7 +69,7 @@ class FrontPageResponse(BaseModel):
 
 class VotePayload(BaseModel):
     article_id: int
-    verdict: Literal["keep", "skip", "open"]
+    verdict: Literal["keep", "skip", "open", "dislike"]
 
 
 class KeptStatePayload(BaseModel):
@@ -184,13 +184,13 @@ def get_frontpage(
 
     categories_by_id = {c.id: c for c in categories}
 
-    # 2. Subquery: articles already triaged (keep or skip) by this user
+    # 2. Subquery: articles already triaged (keep, skip, or dislike) by this user
     triaged_ids = (
         db.query(Vote.article_id)
         .filter(
             Vote.user_id == user.id,
             Vote.article_id.isnot(None),
-            Vote.verdict.in_(["keep", "skip"]),
+            Vote.verdict.in_(interest.TRIAGED_VERDICTS),
         )
         .scalar_subquery()
     )
@@ -310,7 +310,7 @@ def get_category_feed(
         .filter(
             Vote.user_id == user.id,
             Vote.article_id.isnot(None),
-            Vote.verdict.in_(["keep", "skip"]),
+            Vote.verdict.in_(interest.TRIAGED_VERDICTS),
         )
         .scalar_subquery()
     )
@@ -383,7 +383,41 @@ def cast_vote(
         .filter(Vote.user_id == user.id, Vote.article_id == article.id)
         .first()
     )
-    if not vote:
+    if vote is not None:
+        # Opening an already-kept or already-opened article should not erase keep status or double-train
+        if payload.verdict == "open" and vote.verdict in ("keep", "open"):
+            return {
+                "ok": True,
+                "verdict": vote.verdict,
+                "article_id": article.id,
+                "story_id": article.story_id,
+            }
+        if vote.verdict == payload.verdict:
+            return {
+                "ok": True,
+                "verdict": vote.verdict,
+                "article_id": article.id,
+                "story_id": article.story_id,
+            }
+
+        prev_verdict = vote.verdict
+        vote.verdict = payload.verdict
+        vote.kept_state = "unread" if payload.verdict == "keep" else "removed"
+        vote.features = features
+        vote.feature_version = interest.FEATURE_VERSION
+        db.commit()
+
+        if prev_verdict in ("keep", "open", "dislike"):
+            interest.retrain_user_model(db, user.id)
+        else:
+            interest.update_model_online(
+                db,
+                user_id=user.id,
+                household_id=user.household_id,
+                features=features,
+                verdict=payload.verdict,
+            )
+    else:
         vote = Vote(
             user_id=user.id,
             household_id=user.household_id,
@@ -397,21 +431,16 @@ def cast_vote(
         )
         vote.features = features
         db.add(vote)
-    else:
-        vote.verdict = payload.verdict
-        vote.kept_state = "unread" if payload.verdict == "keep" else "removed"
-        vote.features = features
+        db.commit()
 
-    db.commit()
-
-    # Online model learning step
-    interest.update_model_online(
-        db,
-        user_id=user.id,
-        household_id=user.household_id,
-        features=features,
-        verdict=payload.verdict,
-    )
+        # Online model learning step
+        interest.update_model_online(
+            db,
+            user_id=user.id,
+            household_id=user.household_id,
+            features=features,
+            verdict=payload.verdict,
+        )
 
     # If keep and source has text_when == "keep": fetch full text
     if payload.verdict == "keep" and source and source.text_when == "keep":

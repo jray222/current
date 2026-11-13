@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Bookmark, ExternalLink, RefreshCw, Clock, Share2, Check } from 'lucide-react';
-import { getArticle, fetchArticleFulltext, postVote, openArticleByUrl } from '../api';
+import { getArticle, fetchArticleFulltext, postVote, undoVote, openArticleByUrl } from '../api';
 import { navigate, navigateBack } from '../lib/router';
 import AuthImage from '../components/AuthImage';
 import ArticleBody from '../components/ArticleBody';
@@ -45,7 +45,9 @@ export default function ReaderPage({ id }) {
           opened.push(data.id);
           localStorage.setItem('current:opened_ids', JSON.stringify(opened));
         }
-        postVote(data.id, 'open').catch(() => {});
+        if (data.user_vote !== 'keep' && data.user_vote !== 'open') {
+          postVote(data.id, 'open').catch(() => {});
+        }
       } catch {
         // ignore storage errors
       }
@@ -101,9 +103,13 @@ export default function ReaderPage({ id }) {
   const handleToggleKeep = async () => {
     if (!article) return;
     try {
-      const nextVote = isKept ? 'skip' : 'keep';
-      await postVote(article.id, nextVote);
-      setIsKept(!isKept);
+      if (isKept) {
+        await undoVote(article.id);
+        setIsKept(false);
+      } else {
+        await postVote(article.id, 'keep');
+        setIsKept(true);
+      }
     } catch (err) {
       console.error('Failed to update vote:', err);
     }

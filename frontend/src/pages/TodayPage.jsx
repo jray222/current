@@ -17,6 +17,7 @@ import CategorySection from '../components/CategorySection';
 import ArticleRow from '../components/ArticleRow';
 import UndoToast from '../components/UndoToast';
 import FeedCustomizeSheet from '../components/FeedCustomizeSheet';
+import ArticleActionSheet from '../components/ArticleActionSheet';
 
 export default function TodayPage() {
   const [categories, setCategories] = useState([]);
@@ -40,12 +41,13 @@ export default function TodayPage() {
     }
   });
   const [undoState, setUndoState] = useState(null); // { articleId, title, verdict }
+  const [actionArticle, setActionArticle] = useState(null);
   const [formattedDate] = useState(() =>
     new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
   );
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [catsRes, fpRes, settingsRes] = await Promise.all([
         getCategories(),
@@ -60,7 +62,7 @@ export default function TodayPage() {
     } catch (err) {
       console.error('Failed to load front page data:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -132,7 +134,10 @@ export default function TodayPage() {
   const handleSwipe = async (articleId, verdict) => {
     // Find article for undo toast message
     let articleTitle = 'Story';
-    if (frontpage?.lead_story?.id === articleId) {
+    if (selectedCategory) {
+      const found = categoryArticles.find((a) => a.id === articleId);
+      if (found) articleTitle = found.title;
+    } else if (frontpage?.lead_story?.id === articleId) {
       articleTitle = frontpage.lead_story.title;
     } else {
       for (const sec of frontpage?.sections || []) {
@@ -167,6 +172,16 @@ export default function TodayPage() {
             .filter((sec) => sec.articles.length > 0);
           return { lead_story: newLead, sections: newSections };
         });
+      }
+
+      if (verdict === 'dislike') {
+        if (selectedCategory) {
+          getFeed(selectedCategory)
+            .then((items) => setCategoryArticles(items))
+            .catch(() => {});
+        } else {
+          loadData({ silent: true });
+        }
       }
     } catch (err) {
       console.error('Failed to post swipe vote:', err);
@@ -286,7 +301,7 @@ export default function TodayPage() {
                 {categories.find((c) => c.key === selectedCategory)?.label || selectedCategory}
               </span>
               <span className="text-xs text-ink-500 dark:text-ink-400">
-                Swipe right to Keep • Left to Dismiss
+                Swipe right to Keep • Left to Dismiss • Hold for options
               </span>
             </div>
             {categoryArticles.map((article) => (
@@ -294,6 +309,7 @@ export default function TodayPage() {
                 key={article.id}
                 article={article}
                 onSwipe={handleSwipe}
+                onLongPress={setActionArticle}
                 onOpenReader={handleOpenReader}
                 onOpenOriginal={handleOpenOriginal}
                 previewLines={feedSettings.preview_lines}
@@ -309,6 +325,7 @@ export default function TodayPage() {
               <LeadStoryCard
                 article={frontpage.lead_story}
                 onSwipe={handleSwipe}
+                onLongPress={setActionArticle}
                 onOpenReader={handleOpenReader}
                 onOpenOriginal={handleOpenOriginal}
                 isOpened={openedArticleIds.has(frontpage.lead_story.id) || Boolean(frontpage.lead_story.is_opened)}
@@ -322,6 +339,7 @@ export default function TodayPage() {
                 category={section.category}
                 articles={section.articles}
                 onSwipe={handleSwipe}
+                onLongPress={setActionArticle}
                 onOpenReader={handleOpenReader}
                 onOpenOriginal={handleOpenOriginal}
                 onSelectCategory={setSelectedCategory}
@@ -345,10 +363,38 @@ export default function TodayPage() {
         }}
       />
 
+      {/* Long-Press Article Action Sheet */}
+      <ArticleActionSheet
+        article={actionArticle}
+        onClose={() => setActionArticle(null)}
+        onDislike={(art) => {
+          setActionArticle(null);
+          handleSwipe(art.id, 'dislike');
+        }}
+        onKeep={(art) => {
+          setActionArticle(null);
+          handleSwipe(art.id, 'keep');
+        }}
+        onDismiss={(art) => {
+          setActionArticle(null);
+          handleSwipe(art.id, 'skip');
+        }}
+        onOpenReader={(id) => {
+          setActionArticle(null);
+          handleOpenReader(id);
+        }}
+      />
+
       {/* Undo Toast */}
       {undoState && (
         <UndoToast
-          message={undoState.verdict === 'keep' ? 'Saved to Kept' : 'Dismissed story'}
+          message={
+            undoState.verdict === 'keep'
+              ? 'Saved to Kept'
+              : undoState.verdict === 'dislike'
+              ? 'Will show fewer like this'
+              : 'Dismissed story'
+          }
           onUndo={handleUndo}
           onClose={() => setUndoState(null)}
         />

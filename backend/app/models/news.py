@@ -197,7 +197,7 @@ class Vote(Base):
     article_id = Column(Integer, ForeignKey("articles.id", ondelete="SET NULL"), nullable=True, index=True)
     story_id = Column(String(64), nullable=False, index=True)
 
-    verdict = Column(String(20), nullable=False)  # keep | skip | open
+    verdict = Column(String(20), nullable=False)  # keep | skip | open | dislike
     weight = Column(Float, default=1.0, nullable=False)
     features_raw = Column("features", Text, nullable=False)  # snapshot JSON
     feature_version = Column(Integer, default=1, nullable=False)

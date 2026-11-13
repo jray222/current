@@ -75,7 +75,7 @@ export default function LearningSection() {
           <span>Interest Learning & Adaptive Ranking</span>
         </h2>
         <p className="text-xs text-ink-500 dark:text-ink-400 mt-1">
-          Current runs an on-device machine learning model that learns your preferences with every swipe.
+          Current runs an on-device machine learning model that learns from stories you keep and read. Long-press any story and choose “Do not show articles like this” to tune down unwanted topics.
         </p>
       </div>
 
@@ -88,7 +88,7 @@ export default function LearningSection() {
       {/* Model Stats */}
       <div className="grid grid-cols-2 gap-3 p-4 rounded-xl bg-cream-50 dark:bg-ink-800/60 border border-cream-200 dark:border-ink-700/60">
         <div>
-          <span className="block text-[11px] font-semibold text-ink-500 dark:text-ink-400">Total Swipes Learned</span>
+          <span className="block text-[11px] font-semibold text-ink-500 dark:text-ink-400">Signals Learned</span>
           <span className="text-xl font-bold font-mono text-ink-900 dark:text-cream-100">{learning?.n_votes || 0}</span>
         </div>
         <div>
@@ -126,7 +126,7 @@ export default function LearningSection() {
             <span>Less Frequent Topics & Sources</span>
           </h3>
           {negativeInterests.length === 0 ? (
-            <p className="text-xs text-ink-500 italic">No negative patterns learned yet. Swipe left on stories you dislike.</p>
+            <p className="text-xs text-ink-500 italic">No negative patterns learned yet. Long-press a story and choose “Do not show articles like this” to tune down topics you dislike.</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {negativeInterests.map(([k, w]) => (

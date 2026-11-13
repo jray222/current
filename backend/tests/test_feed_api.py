@@ -134,6 +134,38 @@ def test_voting_swiping_and_undo(make_user):
     assert len(res_kept_after.json()) == 0
 
 
+def test_dislike_vote_and_keep_survives_open(make_user):
+    client, user = make_user("dislike_user")
+    art1_id, art2_id, art3_id = _setup_feed_test_data(user["household_id"])
+
+    # Keep art1, then open it (e.g. from Kept list): keep status must remain intact
+    assert client.post("/votes", json={"article_id": art1_id, "verdict": "keep"}).status_code == 200
+    res_open_kept = client.post("/votes", json={"article_id": art1_id, "verdict": "open"})
+    assert res_open_kept.status_code == 200
+    assert res_open_kept.json()["verdict"] == "keep"
+    assert len(client.get("/kept").json()) == 1
+
+    # Dislike art3 ("do not show articles like this")
+    res_dislike = client.post("/votes", json={"article_id": art3_id, "verdict": "dislike"})
+    assert res_dislike.status_code == 200
+    assert res_dislike.json()["verdict"] == "dislike"
+
+    # Disliked article is excluded from frontpage
+    fp = client.get("/frontpage").json()
+    fp_ids = ([fp["lead_story"]["id"]] if fp["lead_story"] else []) + [
+        a["id"] for s in fp["sections"] for a in s["articles"]
+    ]
+    assert art3_id not in fp_ids
+
+    # Undo restores it
+    assert client.delete(f"/votes/{art3_id}").status_code == 200
+    fp2 = client.get("/frontpage").json()
+    fp2_ids = ([fp2["lead_story"]["id"]] if fp2["lead_story"] else []) + [
+        a["id"] for s in fp2["sections"] for a in s["articles"]
+    ]
+    assert art3_id in fp2_ids
+
+
 def test_feed_household_isolation(make_user):
     client_a, user_a = make_user("user_iso_a", "Household A")
     client_b, user_b = make_user("user_iso_b", "Household B")

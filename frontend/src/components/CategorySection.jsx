@@ -35,6 +35,7 @@ export default function CategorySection({
   category,
   articles = [],
   onSwipe,
+  onLongPress,
   onOpenReader,
   onOpenOriginal,
   onSelectCategory,
@@ -74,6 +75,7 @@ export default function CategorySection({
             key={article.id}
             article={article}
             onSwipe={onSwipe}
+            onLongPress={onLongPress}
             onOpenReader={onOpenReader}
             onOpenOriginal={onOpenOriginal}
             previewLines={previewLines}

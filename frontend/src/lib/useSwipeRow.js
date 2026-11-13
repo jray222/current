@@ -1,10 +1,17 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 /**
- * Hook for iOS/mobile email-style horizontal swiping on individual article rows.
- * Supports continuous release threshold (>35% right = keep, <-35% left = skip).
+ * Hook for iOS/mobile email-style horizontal swiping and long-press actions on individual article rows.
+ * Supports continuous release threshold (>35% right = keep, <-35% left = skip) and long-press (>480ms).
  */
-export function useSwipeRow({ onSwipeRight, onSwipeLeft, onTap, threshold = 0.35 }) {
+export function useSwipeRow({
+  onSwipeRight,
+  onSwipeLeft,
+  onTap,
+  onLongPress,
+  threshold = 0.35,
+  longPressMs = 480,
+}) {
   const [offsetX, setOffsetX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isCollapsing, setIsCollapsing] = useState(false);
@@ -13,61 +20,128 @@ export function useSwipeRow({ onSwipeRight, onSwipeLeft, onTap, threshold = 0.35
   const touchStart = useRef({ x: 0, y: 0, time: 0 });
   const rowRef = useRef(null);
   const isHorizontal = useRef(null);
+  const longPressTimer = useRef(null);
+  const longPressTriggered = useRef(false);
+  const lastTouchTime = useRef(0);
 
-  const handleTouchStart = useCallback((e) => {
-    if (isCollapsing) return;
-    const touch = e.touches ? e.touches[0] : e;
-    touchStart.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-    isHorizontal.current = null;
-    setIsDragging(true);
-  }, [isCollapsing]);
+  const clearLongPress = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
 
-  const handleTouchMove = useCallback((e) => {
-    if (!isDragging || isCollapsing) return;
-    const touch = e.touches ? e.touches[0] : e;
-    const deltaX = touch.clientX - touchStart.current.x;
-    const deltaY = touch.clientY - touchStart.current.y;
+  useEffect(() => () => clearLongPress(), [clearLongPress]);
 
-    // Determine swipe direction intent on first significant movement
-    if (isHorizontal.current === null) {
-      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 5) {
-        isHorizontal.current = false; // vertical scroll, don't swipe
-        setIsDragging(false);
-        setOffsetX(0);
-        return;
+  const startGesture = useCallback(
+    (clientX, clientY) => {
+      if (isCollapsing) return;
+      touchStart.current = { x: clientX, y: clientY, time: Date.now() };
+      isHorizontal.current = null;
+      longPressTriggered.current = false;
+      setIsDragging(true);
+
+      clearLongPress();
+      if (onLongPress) {
+        longPressTimer.current = setTimeout(() => {
+          longPressTimer.current = null;
+          longPressTriggered.current = true;
+          setIsDragging(false);
+          setOffsetX(0);
+          setSwipeAction(null);
+          try {
+            navigator.vibrate?.(15);
+          } catch {
+            // ignore unsupported vibration API
+          }
+          onLongPress();
+        }, longPressMs);
       }
-      if (Math.abs(deltaX) > 5) {
-        isHorizontal.current = true;
+    },
+    [isCollapsing, clearLongPress, onLongPress, longPressMs]
+  );
+
+  const handleTouchStart = useCallback(
+    (e) => {
+      lastTouchTime.current = Date.now();
+      const touch = e.touches[0];
+      if (!touch) return;
+      startGesture(touch.clientX, touch.clientY);
+    },
+    [startGesture]
+  );
+
+  const handleMouseDown = useCallback(
+    (e) => {
+      if (e.button !== 0) return;
+      if (Date.now() - lastTouchTime.current < 700) return;
+      startGesture(e.clientX, e.clientY);
+    },
+    [startGesture]
+  );
+
+  const handleMove = useCallback(
+    (e) => {
+      if (!isDragging || isCollapsing || longPressTriggered.current) return;
+      const touch = e.touches ? e.touches[0] : e;
+      if (!touch) return;
+      const deltaX = touch.clientX - touchStart.current.x;
+      const deltaY = touch.clientY - touchStart.current.y;
+
+      if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
+        clearLongPress();
       }
-    }
 
-    if (!isHorizontal.current) return;
+      // Determine swipe direction intent on first significant movement
+      if (isHorizontal.current === null) {
+        if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 5) {
+          isHorizontal.current = false; // vertical scroll, don't swipe
+          setIsDragging(false);
+          setOffsetX(0);
+          return;
+        }
+        if (Math.abs(deltaX) > 5) {
+          isHorizontal.current = true;
+        }
+      }
 
-    if (e.cancelable && e.preventDefault) {
-      e.preventDefault();
-    }
+      if (!isHorizontal.current) return;
 
-    const width = rowRef.current?.offsetWidth || 300;
-    // Add elastic resistance past threshold
-    let targetX = deltaX;
-    if (Math.abs(deltaX) > width * 0.6) {
-      const excess = Math.abs(deltaX) - width * 0.6;
-      targetX = (deltaX > 0 ? 1 : -1) * (width * 0.6 + excess * 0.3);
-    }
+      if (e.cancelable && e.preventDefault) {
+        e.preventDefault();
+      }
 
-    setOffsetX(targetX);
+      const width = rowRef.current?.offsetWidth || 300;
+      // Add elastic resistance past threshold
+      let targetX = deltaX;
+      if (Math.abs(deltaX) > width * 0.6) {
+        const excess = Math.abs(deltaX) - width * 0.6;
+        targetX = (deltaX > 0 ? 1 : -1) * (width * 0.6 + excess * 0.3);
+      }
 
-    const ratio = deltaX / width;
-    if (ratio > threshold) {
-      setSwipeAction('keep');
-    } else if (ratio < -threshold) {
-      setSwipeAction('skip');
-    } else {
+      setOffsetX(targetX);
+
+      const ratio = deltaX / width;
+      if (ratio > threshold) {
+        setSwipeAction('keep');
+      } else if (ratio < -threshold) {
+        setSwipeAction('skip');
+      } else {
+        setSwipeAction(null);
+      }
+    },
+    [isDragging, isCollapsing, threshold, clearLongPress]
+  );
+
+  const handleEnd = useCallback(() => {
+    clearLongPress();
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      setIsDragging(false);
+      setOffsetX(0);
       setSwipeAction(null);
+      return;
     }
-  }, [isDragging, isCollapsing, threshold]);
-
-  const handleTouchEnd = useCallback(() => {
     if (!isDragging) return;
     setIsDragging(false);
 
@@ -103,7 +177,36 @@ export function useSwipeRow({ onSwipeRight, onSwipeLeft, onTap, threshold = 0.35
       setOffsetX(0);
       setSwipeAction(null);
     }
-  }, [isDragging, offsetX, threshold, onSwipeRight, onSwipeLeft, onTap]);
+  }, [isDragging, offsetX, threshold, onSwipeRight, onSwipeLeft, onTap, clearLongPress]);
+
+  const handleTouchEnd = useCallback(() => {
+    lastTouchTime.current = Date.now();
+    handleEnd();
+  }, [handleEnd]);
+
+  const handleCancel = useCallback(() => {
+    clearLongPress();
+    longPressTriggered.current = false;
+    setIsDragging(false);
+    setOffsetX(0);
+    setSwipeAction(null);
+  }, [clearLongPress]);
+
+  const handleContextMenu = useCallback(
+    (e) => {
+      if (!onLongPress) return;
+      e.preventDefault();
+      clearLongPress();
+      setIsDragging(false);
+      setOffsetX(0);
+      setSwipeAction(null);
+      if (!longPressTriggered.current) {
+        onLongPress();
+      }
+      longPressTriggered.current = false;
+    },
+    [onLongPress, clearLongPress]
+  );
 
   return {
     rowRef,
@@ -113,12 +216,14 @@ export function useSwipeRow({ onSwipeRight, onSwipeLeft, onTap, threshold = 0.35
     swipeAction,
     handlers: {
       onTouchStart: handleTouchStart,
-      onTouchMove: handleTouchMove,
+      onTouchMove: handleMove,
       onTouchEnd: handleTouchEnd,
-      onMouseDown: handleTouchStart,
-      onMouseMove: handleTouchMove,
-      onMouseUp: handleTouchEnd,
-      onMouseLeave: handleTouchEnd,
+      onTouchCancel: handleCancel,
+      onMouseDown: handleMouseDown,
+      onMouseMove: handleMove,
+      onMouseUp: handleEnd,
+      onMouseLeave: handleCancel,
+      onContextMenu: handleContextMenu,
     },
   };
 }

@@ -21,6 +21,7 @@ function formatRelativeTime(dateStr) {
 export default function LeadStoryCard({
   article,
   onSwipe,
+  onLongPress,
   onOpenReader,
   onOpenOriginal,
   isOpened = false,
@@ -31,6 +32,7 @@ export default function LeadStoryCard({
     onSwipeRight: () => onSwipe(article.id, 'keep'),
     onSwipeLeft: () => onSwipe(article.id, 'skip'),
     onTap: () => onOpenReader(article.id),
+    onLongPress: onLongPress && article ? () => onLongPress(article) : undefined,
   });
 
   if (!article) return null;
@@ -66,6 +68,7 @@ export default function LeadStoryCard({
         style={{
           transform: `translateX(${offsetX}px)`,
           transition: isDragging ? 'none' : 'transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          WebkitTouchCallout: 'none',
         }}
         className={`group relative bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 rounded-3xl shadow-sm hover:shadow-lg transition-all cursor-pointer select-none overflow-hidden ${
           opened ? 'opacity-65 dark:opacity-55' : 'opacity-100'
@@ -130,6 +133,9 @@ export default function LeadStoryCard({
                   onOpenOriginal?.(article);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onContextMenu={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-cream-100 dark:bg-ink-800 text-ink-700 dark:text-ink-300 hover:text-brand-700 dark:hover:text-volt-400 hover:bg-cream-200 dark:hover:bg-ink-700 transition-colors shrink-0"
                 title="Open original article on publisher website"
               >

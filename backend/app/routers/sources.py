@@ -161,13 +161,13 @@ def list_categories(
     else:
         categories.sort(key=lambda c: (c.sort_order, c.id))
 
-    # Subquery: articles already triaged (keep or skip) by this user
+    # Subquery: articles already triaged (keep, skip, or dislike) by this user
     triaged_ids = (
         db.query(Vote.article_id)
         .filter(
             Vote.user_id == user.id,
             Vote.article_id.isnot(None),
-            Vote.verdict.in_(["keep", "skip"]),
+            Vote.verdict.in_(("keep", "skip", "dislike")),
         )
         .scalar_subquery()
     )

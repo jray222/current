@@ -21,6 +21,7 @@ function formatRelativeTime(dateStr) {
 export default function ArticleRow({
   article,
   onSwipe,
+  onLongPress,
   onOpenReader,
   onOpenOriginal,
   previewLines = 2,
@@ -32,6 +33,7 @@ export default function ArticleRow({
     onSwipeRight: () => onSwipe(article.id, 'keep'),
     onSwipeLeft: () => onSwipe(article.id, 'skip'),
     onTap: () => onOpenReader(article.id),
+    onLongPress: onLongPress ? () => onLongPress(article) : undefined,
   });
 
   const bgStyle = swipeAction === 'keep'
@@ -67,6 +69,7 @@ export default function ArticleRow({
         style={{
           transform: `translateX(${offsetX}px)`,
           transition: isDragging ? 'none' : 'transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          WebkitTouchCallout: 'none',
         }}
         className={`group relative bg-white dark:bg-ink-900 border border-cream-200/90 dark:border-ink-800/90 rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-brand-500/30 dark:hover:border-volt-500/30 transition-all cursor-pointer select-none ${
           opened ? 'opacity-65 dark:opacity-55' : 'opacity-100'
@@ -109,6 +112,9 @@ export default function ArticleRow({
                     onOpenOriginal?.(article);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onContextMenu={(e) => e.stopPropagation()}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-ink-500 dark:text-ink-400 hover:text-brand-700 dark:hover:text-volt-400 hover:bg-cream-100 dark:hover:bg-ink-800 transition-colors shrink-0"
                   title="Open original article on publisher website"
                   aria-label="Open original article"

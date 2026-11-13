@@ -30,11 +30,11 @@ def prune_retention(db: Session) -> dict[str, int]:
         .scalar_subquery()
     )
 
-    # 2. Collect articles with a 'skip' vote older than 14 days
+    # 2. Collect articles with a 'skip' or 'dislike' vote older than 14 days
     skipped_old_ids = (
         db.query(Vote.article_id)
         .filter(
-            Vote.verdict == "skip",
+            Vote.verdict.in_(["skip", "dislike"]),
             Vote.created_at < cutoff_skipped,
             Vote.article_id.isnot(None),
         )
