@@ -146,3 +146,68 @@ def test_resume_pending_crawls(make_user):
         assert src1.crawl_status == "idle"
         assert src2.crawl_status == "idle"
         assert run.status == "aborted"
+
+
+def test_cross_household_crawl_shares_scrape(make_user, monkeypatch):
+    _, user_a = make_user("shared_crawl_a", "Household A")
+    _, user_b = make_user("shared_crawl_b", "Household B")
+
+    fetch_calls = 0
+    mock_entries = [
+        FeedEntry(
+            title="Shared Site Headline",
+            url="https://shared.example.com/story-1",
+            summary="Shared summary.",
+            author="Reporter",
+            published_at=datetime(2026, 11, 10, 12, 0, 0),
+            image_remote_url=None,
+            tags=["World"],
+        )
+    ]
+
+    def mock_fetch_and_parse(url, **kwargs):
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return {"title": "Shared Daily"}, mock_entries, url
+
+    monkeypatch.setattr(crawler, "fetch_and_parse_feed", mock_fetch_and_parse)
+
+    with SessionLocal() as db:
+        src_a = Source(
+            household_id=user_a["household_id"],
+            url="https://shared.example.com",
+            name="Shared Daily",
+            site_host="shared.example.com",
+            fetch_mode="rss",
+            feed_url="https://shared.example.com/rss",
+        )
+        src_b = Source(
+            household_id=user_b["household_id"],
+            url="https://shared.example.com",
+            name="Shared Daily",
+            site_host="shared.example.com",
+            fetch_mode="rss",
+            feed_url="https://shared.example.com/rss",
+        )
+        db.add_all([src_a, src_b])
+        db.commit()
+        src_a_id, src_b_id = src_a.id, src_b.id
+
+    crawler.crawl_source(src_a_id, trigger="schedule")
+    assert fetch_calls == 1
+
+    # Second household crawling the same feed reuses the cached scrape without hitting the network
+    crawler.crawl_source(src_b_id, trigger="schedule")
+    assert fetch_calls == 1
+
+    with SessionLocal() as db:
+        arts_a = db.query(Article).filter_by(household_id=user_a["household_id"]).all()
+        arts_b = db.query(Article).filter_by(household_id=user_b["household_id"]).all()
+        assert len(arts_a) == 1
+        assert len(arts_b) == 1
+        assert arts_a[0].id != arts_b[0].id
+        assert arts_b[0].title == "Shared Site Headline"
+
+    # Explicit force=True bypasses the shared cache
+    crawler.crawl_source(src_b_id, trigger="manual", force=True)
+    assert fetch_calls == 2

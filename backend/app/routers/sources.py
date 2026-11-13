@@ -589,7 +589,7 @@ def trigger_source_crawl(
     db: Session = Depends(get_db),
 ):
     src = get_owned_or_404(db, Source, id, user.household_id, "Source")
-    crawler_service.enqueue_source_crawl(src.id, trigger="manual")
+    crawler_service.enqueue_source_crawl(src.id, trigger="manual", force=force)
     return {"ok": True, "source_id": src.id, "status": "queued"}
 
 

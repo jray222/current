@@ -41,9 +41,10 @@ def fresh_db(schema):
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(table.delete())
     auth_rate_limiter.reset()
-    from app.services import keys, lockout
+    from app.services import crawler, keys, lockout
     lockout.reset()
     keys.reset_state()
+    crawler.clear_scrape_cache()
     yield
 
 

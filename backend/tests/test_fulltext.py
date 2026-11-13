@@ -215,3 +215,80 @@ def test_collection_blocks_extraction():
     assert "Teaser description for story one" in story_cards[0]["summary"]
 
 
+def test_cross_household_fulltext_reuse(make_user, monkeypatch):
+    client_a, user_a = make_user("ft_shared_a", "Household FT A")
+    client_b, user_b = make_user("ft_shared_b", "Household FT B")
+
+    fetch_calls = 0
+
+    def mock_safe_fetch(url, **kwargs):
+        nonlocal fetch_calls
+        fetch_calls += 1
+        return FetchResponse(
+            url=url,
+            status_code=200,
+            headers={"content-type": "text/html"},
+            content=SAMPLE_ARTICLE_HTML.encode("utf-8"),
+            text=SAMPLE_ARTICLE_HTML,
+        )
+
+    from app.services import fulltext
+    monkeypatch.setattr(fulltext, "safe_fetch", mock_safe_fetch)
+
+    with SessionLocal() as db:
+        src_a = Source(
+            household_id=user_a["household_id"],
+            url="https://sharedft.example.com",
+            name="Shared FT",
+            site_host="sharedft.example.com",
+        )
+        src_b = Source(
+            household_id=user_b["household_id"],
+            url="https://sharedft.example.com",
+            name="Shared FT",
+            site_host="sharedft.example.com",
+        )
+        db.add_all([src_a, src_b])
+        db.flush()
+
+        art_a = Article(
+            household_id=user_a["household_id"],
+            source_id=src_a.id,
+            url="https://sharedft.example.com/story",
+            canonical_url="https://sharedft.example.com/story",
+            url_hash="shared-ft-hash",
+            story_id="s-ft-a",
+            title="Shared Story",
+            text_status="none",
+        )
+        art_b = Article(
+            household_id=user_b["household_id"],
+            source_id=src_b.id,
+            url="https://sharedft.example.com/story",
+            canonical_url="https://sharedft.example.com/story",
+            url_hash="shared-ft-hash",
+            story_id="s-ft-b",
+            title="Shared Story",
+            text_status="none",
+        )
+        db.add_all([art_a, art_b])
+        db.commit()
+        art_a_id, art_b_id = art_a.id, art_b.id
+
+    fetch_article_text(art_a_id)
+    assert fetch_calls == 1
+
+    # Household B gets the extracted blocks without a second outbound fetch
+    fetch_article_text(art_b_id)
+    assert fetch_calls == 1
+
+    with SessionLocal() as db:
+        b = db.get(Article, art_b_id)
+        assert b.text_status in ("ok", "partial")
+        assert b.text_blocks is not None
+        assert b.word_count > 20
+
+    # Household isolation remains enforced
+    assert client_b.get(f"/articles/{art_a_id}").status_code == 404
+
+

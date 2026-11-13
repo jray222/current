@@ -3,6 +3,8 @@ story clustering, and background job handling.
 """
 from datetime import datetime, timezone
 import logging
+import threading
+import time
 import traceback
 import urllib.parse
 from typing import Optional, Any
@@ -22,6 +24,35 @@ from app.services.safe_fetch import safe_fetch
 
 logger = logging.getLogger("current.crawler")
 MAX_NEW_PER_SOURCE = 50
+SCRAPE_CACHE_TTL_SECONDS = 15 * 60
+SCRAPE_CACHE_MAX_ENTRIES = 500
+
+_cache_lock = threading.Lock()
+_scrape_cache: dict[tuple[str, str, str, str], tuple[float, list[FeedEntry]]] = {}
+_in_flight: dict[tuple[str, str, str, str], threading.Event] = {}
+
+
+def _store_cached_entries(
+    cache_key: tuple[str, str, str, str],
+    entries: list[FeedEntry],
+) -> None:
+    now = time.monotonic()
+    with _cache_lock:
+        if len(_scrape_cache) >= SCRAPE_CACHE_MAX_ENTRIES:
+            expired = [k for k, (ts, _) in _scrape_cache.items() if now - ts >= SCRAPE_CACHE_TTL_SECONDS]
+            for k in expired:
+                _scrape_cache.pop(k, None)
+            while len(_scrape_cache) >= SCRAPE_CACHE_MAX_ENTRIES:
+                oldest_key = min(_scrape_cache, key=lambda k: _scrape_cache[k][0])
+                _scrape_cache.pop(oldest_key, None)
+        _scrape_cache[cache_key] = (now, list(entries))
+
+
+def clear_scrape_cache() -> None:
+    """Clears the cross-household source scrape cache (primarily for tests)."""
+    with _cache_lock:
+        _scrape_cache.clear()
+        _in_flight.clear()
 
 
 def check_source(db: Session, household_id: int, url: str) -> dict[str, Any]:
@@ -212,6 +243,144 @@ def _ingest_entries(
     return found_count, new_count
 
 
+def _scrape_source_entries(
+    fetch_mode: str,
+    feed_url: Optional[str],
+    listing_url: Optional[str],
+    url: str,
+    link_pattern: Optional[str],
+    link_selector: Optional[str],
+) -> list[FeedEntry]:
+    """Fetches and parses feed or article listing entries from the remote site."""
+    entries: list[FeedEntry] = []
+
+    if fetch_mode == "rss":
+        feed_target = feed_url or url
+        _info, entries, _final = fetch_and_parse_feed(feed_target)
+
+    elif fetch_mode == "html":
+        listing_target = listing_url or url
+        res = safe_fetch(listing_target)
+        links = extract_article_links(
+            res.text,
+            res.url,
+            link_pattern=link_pattern,
+            link_selector=link_selector,
+        )
+        for link in links[:MAX_NEW_PER_SOURCE]:
+            try:
+                art_res = safe_fetch(link, max_bytes=2 * 1024 * 1024)
+                meta = extract_meta(art_res.text, art_res.url)
+                entries.append(
+                    FeedEntry(
+                        title=meta["title"],
+                        url=art_res.url,
+                        summary=meta["summary"],
+                        author=meta["author"],
+                        published_at=meta["published_at"],
+                        image_remote_url=meta["image_remote_url"],
+                        tags=meta["feed_tags"],
+                    )
+                )
+            except Exception:
+                continue
+
+    elif fetch_mode == "browser":
+        from app.services.browser import fetch_page_content
+        listing_target = listing_url or url
+        html_text = fetch_page_content(listing_target)
+        links = extract_article_links(
+            html_text,
+            listing_target,
+            link_pattern=link_pattern,
+            link_selector=link_selector,
+        )
+        for link in links[:MAX_NEW_PER_SOURCE]:
+            try:
+                art_html = fetch_page_content(link)
+                meta = extract_meta(art_html, link)
+                entries.append(
+                    FeedEntry(
+                        title=meta["title"],
+                        url=link,
+                        summary=meta["summary"],
+                        author=meta["author"],
+                        published_at=meta["published_at"],
+                        image_remote_url=meta["image_remote_url"],
+                        tags=meta["feed_tags"],
+                    )
+                )
+            except Exception:
+                continue
+
+    return entries
+
+
+def _get_or_scrape_entries(
+    fetch_mode: str,
+    feed_url: Optional[str],
+    listing_url: Optional[str],
+    url: str,
+    link_pattern: Optional[str],
+    link_selector: Optional[str],
+    force: bool = False,
+) -> list[FeedEntry]:
+    """Returns scraped entries, sharing recent fetches across households via a TTL cache
+    and coalescing concurrent scrapes of the same source target.
+    """
+    raw_target = (feed_url or url) if fetch_mode == "rss" else (listing_url or url)
+    cache_key = (
+        fetch_mode,
+        canonical_url(raw_target),
+        link_pattern or "",
+        link_selector or "",
+    )
+
+    if force:
+        entries = _scrape_source_entries(
+            fetch_mode, feed_url, listing_url, url, link_pattern, link_selector
+        )
+        if entries:
+            _store_cached_entries(cache_key, entries)
+        return entries
+
+    leader_event: Optional[threading.Event] = None
+    while True:
+        wait_event: Optional[threading.Event] = None
+        with _cache_lock:
+            cached = _scrape_cache.get(cache_key)
+            if cached is not None:
+                ts, cached_entries = cached
+                if time.monotonic() - ts < SCRAPE_CACHE_TTL_SECONDS:
+                    return list(cached_entries)
+                _scrape_cache.pop(cache_key, None)
+
+            existing_flight = _in_flight.get(cache_key)
+            if existing_flight is not None:
+                wait_event = existing_flight
+            else:
+                leader_event = threading.Event()
+                _in_flight[cache_key] = leader_event
+                break
+
+        # Another thread is currently scraping this exact site; wait for it to finish.
+        wait_event.wait(timeout=120.0)
+
+    try:
+        entries = _scrape_source_entries(
+            fetch_mode, feed_url, listing_url, url, link_pattern, link_selector
+        )
+        if entries:
+            _store_cached_entries(cache_key, entries)
+        return entries
+    finally:
+        with _cache_lock:
+            if _in_flight.get(cache_key) is leader_event:
+                _in_flight.pop(cache_key, None)
+        if leader_event is not None:
+            leader_event.set()
+
+
 def crawl_source(source_id: int, trigger: str = "manual", force: bool = False) -> None:
     """Executes a single crawl run for a source, handling RSS, HTML, and browser modes."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -253,66 +422,15 @@ def crawl_source(source_id: int, trigger: str = "manual", force: bool = False) -
     new_count = 0
 
     try:
-        entries: list[FeedEntry] = []
-
-        if fetch_mode == "rss":
-            feed_target = feed_url or url
-            _info, entries, _final = fetch_and_parse_feed(feed_target)
-
-        elif fetch_mode == "html":
-            listing_target = listing_url or url
-            res = safe_fetch(listing_target)
-            links = extract_article_links(
-                res.text,
-                res.url,
-                link_pattern=link_pattern,
-                link_selector=link_selector,
-            )
-            for link in links[:MAX_NEW_PER_SOURCE]:
-                try:
-                    art_res = safe_fetch(link, max_bytes=2 * 1024 * 1024)
-                    meta = extract_meta(art_res.text, art_res.url)
-                    entries.append(
-                        FeedEntry(
-                            title=meta["title"],
-                            url=art_res.url,
-                            summary=meta["summary"],
-                            author=meta["author"],
-                            published_at=meta["published_at"],
-                            image_remote_url=meta["image_remote_url"],
-                            tags=meta["feed_tags"],
-                        )
-                    )
-                except Exception:
-                    continue
-
-        elif fetch_mode == "browser":
-            from app.services.browser import fetch_page_content
-            listing_target = listing_url or url
-            html_text = fetch_page_content(listing_target)
-            links = extract_article_links(
-                html_text,
-                listing_target,
-                link_pattern=link_pattern,
-                link_selector=link_selector,
-            )
-            for link in links[:MAX_NEW_PER_SOURCE]:
-                try:
-                    art_html = fetch_page_content(link)
-                    meta = extract_meta(art_html, link)
-                    entries.append(
-                        FeedEntry(
-                            title=meta["title"],
-                            url=link,
-                            summary=meta["summary"],
-                            author=meta["author"],
-                            published_at=meta["published_at"],
-                            image_remote_url=meta["image_remote_url"],
-                            tags=meta["feed_tags"],
-                        )
-                    )
-                except Exception:
-                    continue
+        entries = _get_or_scrape_entries(
+            fetch_mode=fetch_mode,
+            feed_url=feed_url,
+            listing_url=listing_url,
+            url=url,
+            link_pattern=link_pattern,
+            link_selector=link_selector,
+            force=force,
+        )
 
         with SessionLocal() as db:
             src = db.get(Source, source_id)
@@ -354,7 +472,12 @@ def crawl_source(source_id: int, trigger: str = "manual", force: bool = False) -
         db.commit()
 
 
-def enqueue_source_crawl(source_id: int, trigger: str = "manual", priority: int = Priority.NORMAL) -> bool:
+def enqueue_source_crawl(
+    source_id: int,
+    trigger: str = "manual",
+    priority: int = Priority.NORMAL,
+    force: bool = False,
+) -> bool:
     """Enqueues a crawl job for a specific source."""
     with SessionLocal() as db:
         src = db.get(Source, source_id)
@@ -366,6 +489,7 @@ def enqueue_source_crawl(source_id: int, trigger: str = "manual", priority: int 
         "crawl_source",
         source_id,
         trigger,
+        force,
         priority=priority,
         dedupe_key=f"crawl-{source_id}",
     )

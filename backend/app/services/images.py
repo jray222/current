@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from PIL import Image
+from sqlalchemy.orm import Session
 
 # Cap decompression bomb limit to 10 Megapixels for thumbnail generation
 Image.MAX_IMAGE_PIXELS = 10_000_000
@@ -106,6 +107,39 @@ def delete_image(rel_path: str) -> None:
             pass
 
 
+def _copy_existing_thumb(db: Session, household_id: int, remote_url: str) -> Optional[str]:
+    """Reuses an already-downloaded thumbnail for the same remote URL across households
+    by copying its processed JPEG bytes into this household's own image directory.
+    """
+    donors = (
+        db.query(Article.thumb_path)
+        .filter(
+            Article.image_remote_url == remote_url,
+            Article.thumb_path.isnot(None),
+        )
+        .limit(5)
+        .all()
+    )
+    for (donor_rel,) in donors:
+        src_path = get_image_absolute_path(donor_rel)
+        if not src_path or not src_path.is_file():
+            continue
+        try:
+            jpeg_bytes = src_path.read_bytes()
+        except OSError:
+            continue
+        if not jpeg_bytes:
+            continue
+        file_hash = hashlib.sha256(jpeg_bytes).hexdigest()[:20]
+        rel_path = f"{household_id}/{file_hash}.jpg"
+        dest_dir = settings.images_dir / str(household_id)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_file = dest_dir / f"{file_hash}.jpg"
+        dest_file.write_bytes(jpeg_bytes)
+        return rel_path
+    return None
+
+
 def _download_article_image_job(article_id: int) -> None:
     """Background worker job to fetch and store thumbnail for an article."""
     with SessionLocal() as db:
@@ -113,7 +147,9 @@ def _download_article_image_job(article_id: int) -> None:
         if not article or not article.image_remote_url or article.thumb_path:
             return
 
-        thumb = download_and_store_thumb(article.household_id, article.image_remote_url)
+        thumb = _copy_existing_thumb(db, article.household_id, article.image_remote_url)
+        if not thumb:
+            thumb = download_and_store_thumb(article.household_id, article.image_remote_url)
         if thumb:
             article.thumb_path = thumb
             db.commit()

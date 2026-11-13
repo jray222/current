@@ -8,6 +8,7 @@ import re
 import urllib.parse
 from typing import Optional, Any
 from lxml import etree, html as lxml_html
+from sqlalchemy.orm import Session
 import trafilatura
 
 from app.database import SessionLocal
@@ -305,6 +306,35 @@ def count_words(blocks: list[dict[str, Any]]) -> int:
     return words
 
 
+def _find_reusable_article_text(
+    db: Session,
+    article_id: int,
+    url_hash: str,
+    preferred_method: str,
+) -> Optional[Article]:
+    """Finds an already-extracted Article with the same URL hash so multiple households
+    do not redundantly scrape the same article page.
+    """
+    if not url_hash:
+        return None
+    query = db.query(Article).filter(
+        Article.id != article_id,
+        Article.url_hash == url_hash,
+        Article.text_status.in_(["ok", "partial"]),
+        Article.text_blocks_raw.isnot(None),
+    )
+    if preferred_method == "browser":
+        query = query.filter(Article.text_method == "browser")
+    elif preferred_method == "http":
+        query = query.filter(Article.text_method.in_(["http", "amp"]))
+
+    candidates = query.order_by(Article.text_fetched_at.desc()).limit(5).all()
+    if not candidates:
+        return None
+    # Prefer full "ok" extractions over "partial"
+    return next((c for c in candidates if c.text_status == "ok"), candidates[0])
+
+
 def fetch_article_text(article_id: int, force: bool = False) -> None:
     """Executes the fetch ladder (HTTP -> AMP -> Browser) to extract full text for an article."""
     with SessionLocal() as db:
@@ -314,15 +344,29 @@ def fetch_article_text(article_id: int, force: bool = False) -> None:
         if article.text_status == "ok" and not force:
             return
 
-        article.text_status = "running"
-        db.commit()
-
         url = article.url
         amp_url = article.amp_url
+        u_hash = article.url_hash
         source = db.get(Source, article.source_id) if article.source_id else None
         preferred_method = source.text_method if source else "auto"
         custom_selector = source.text_selector if source else None
         block_ads = bool(source.text_block_ads) if source else True
+
+        if not force and not custom_selector and block_ads:
+            donor = _find_reusable_article_text(db, article_id, u_hash, preferred_method)
+            if donor is not None:
+                article.text_blocks_raw = donor.text_blocks_raw
+                article.text_status = donor.text_status
+                article.text_method = donor.text_method
+                article.word_count = donor.word_count
+                article.text_pages = donor.text_pages
+                article.text_error = None
+                article.text_fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                db.commit()
+                return
+
+        article.text_status = "running"
+        db.commit()
 
     blocks: list[dict[str, Any]] = []
     method_used: Optional[str] = None
