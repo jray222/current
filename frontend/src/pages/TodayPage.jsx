@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { RefreshCw, Rss, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 import {
   getFrontpage,
@@ -42,6 +42,7 @@ export default function TodayPage() {
   });
   const [undoState, setUndoState] = useState(null); // { articleId, title, verdict }
   const [actionArticle, setActionArticle] = useState(null);
+  const suppressTapUntilRef = useRef(0);
   const [formattedDate] = useState(() =>
     new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
   );
@@ -121,7 +122,13 @@ export default function TodayPage() {
     postVote(articleId, 'open').catch(() => {});
   };
 
-  const handleOpenReader = (articleId) => {
+  const closeActionSheet = useCallback(() => {
+    suppressTapUntilRef.current = Date.now() + 400;
+    setActionArticle(null);
+  }, []);
+
+  const handleOpenReader = (articleId, { force = false } = {}) => {
+    if (!force && (actionArticle || Date.now() < suppressTapUntilRef.current)) return;
     saveScrollPosition('/');
     markArticleOpened(articleId);
     navigate(`/reader/${articleId}`);
@@ -366,22 +373,22 @@ export default function TodayPage() {
       {/* Long-Press Article Action Sheet */}
       <ArticleActionSheet
         article={actionArticle}
-        onClose={() => setActionArticle(null)}
+        onClose={closeActionSheet}
         onDislike={(art) => {
-          setActionArticle(null);
+          closeActionSheet();
           handleSwipe(art.id, 'dislike');
         }}
         onKeep={(art) => {
-          setActionArticle(null);
+          closeActionSheet();
           handleSwipe(art.id, 'keep');
         }}
         onDismiss={(art) => {
-          setActionArticle(null);
+          closeActionSheet();
           handleSwipe(art.id, 'skip');
         }}
         onOpenReader={(id) => {
-          setActionArticle(null);
-          handleOpenReader(id);
+          closeActionSheet();
+          handleOpenReader(id, { force: true });
         }}
       />
 

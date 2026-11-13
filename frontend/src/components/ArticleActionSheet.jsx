@@ -1,7 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Ban, Bookmark, Trash2, BookOpen, X } from 'lucide-react';
 
 export default function ArticleActionSheet({ article, onClose, onDislike, onKeep, onDismiss, onOpenReader }) {
+  const backdropPressRef = useRef(false);
+
   useEffect(() => {
     if (!article) return undefined;
     const onKey = (e) => {
@@ -17,7 +19,31 @@ export default function ArticleActionSheet({ article, onClose, onDislike, onKeep
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink-950/55 backdrop-blur-xs"
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        e.stopPropagation();
+        backdropPressRef.current = e.target === e.currentTarget;
+      }}
+      onTouchStart={(e) => {
+        e.stopPropagation();
+        backdropPressRef.current = e.target === e.currentTarget;
+      }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        backdropPressRef.current = e.target === e.currentTarget;
+      }}
+      onTouchEnd={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget && backdropPressRef.current) {
+          e.preventDefault();
+          backdropPressRef.current = false;
+          onClose();
+        }
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget && backdropPressRef.current) {
+          backdropPressRef.current = false;
+          onClose();
+        }
       }}
     >
       <div
