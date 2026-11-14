@@ -51,7 +51,9 @@ export default function LeadStoryCard({
       }`}
     >
       {/* Background Action Reveal */}
-      <div className={`absolute inset-0 flex items-center justify-between px-8 transition-all duration-200 ${bgStyle}`}>
+      <div className={`absolute inset-0 flex items-center justify-between px-8 transition-all duration-200 ${bgStyle} ${
+        isDragging || isCollapsing || offsetX !== 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}>
         <div className={`flex items-center gap-2 font-bold text-sm tracking-wide transition-transform ${offsetX > 50 ? 'scale-110 opacity-100' : 'scale-95 opacity-60'}`}>
           <Bookmark className="w-5 h-5 fill-current" />
           <span>Keep Top Story</span>
@@ -70,13 +72,11 @@ export default function LeadStoryCard({
           transition: isDragging ? 'none' : 'transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           WebkitTouchCallout: 'none',
         }}
-        className={`group relative bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 rounded-3xl shadow-sm hover:shadow-lg transition-all cursor-pointer select-none overflow-hidden ${
-          opened ? 'opacity-65 dark:opacity-55' : 'opacity-100'
-        }`}
+        className="group relative bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 rounded-3xl shadow-sm hover:shadow-lg transition-all cursor-pointer select-none overflow-hidden"
       >
         {/* Lead Image */}
         {(article.thumb_path || article.image_remote_url) && (
-          <div className={`relative aspect-[16/9] sm:aspect-[21/9] w-full overflow-hidden bg-cream-200 dark:bg-ink-800 ${opened ? 'grayscale-[30%]' : ''}`}>
+          <div className={`relative aspect-[16/9] sm:aspect-[21/9] w-full overflow-hidden bg-cream-200 dark:bg-ink-800 ${opened ? 'grayscale-[30%] opacity-65 dark:opacity-55' : ''}`}>
             {article.thumb_path ? (
               <AuthImage
                 path={`/images/${article.thumb_path}`}
@@ -104,7 +104,7 @@ export default function LeadStoryCard({
           </div>
         )}
 
-        <div className="p-5 sm:p-7">
+        <div className={`p-5 sm:p-7 ${opened ? 'opacity-65 dark:opacity-55' : 'opacity-100'}`}>
           {/* Metadata Bar */}
           <div className="flex items-center justify-between text-xs text-ink-500 dark:text-ink-400 mb-2.5">
             <div className="flex items-center gap-2 min-w-0 pr-2">

@@ -52,7 +52,9 @@ export default function ArticleRow({
       }`}
     >
       {/* Background Reveal under swipe */}
-      <div className={`absolute inset-0 flex items-center justify-between px-6 rounded-2xl transition-all duration-200 ${bgStyle}`}>
+      <div className={`absolute inset-0 flex items-center justify-between px-6 rounded-2xl transition-all duration-200 ${bgStyle} ${
+        isDragging || isCollapsing || offsetX !== 0 ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}>
         <div className={`flex items-center gap-2 font-bold text-xs uppercase tracking-wider transition-transform ${offsetX > 40 ? 'scale-110 opacity-100' : 'scale-90 opacity-60'}`}>
           <Bookmark className="w-4 h-4 fill-current" />
           <span>Keep Story</span>
@@ -71,11 +73,9 @@ export default function ArticleRow({
           transition: isDragging ? 'none' : 'transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
           WebkitTouchCallout: 'none',
         }}
-        className={`group relative bg-white dark:bg-ink-900 border border-cream-200/90 dark:border-ink-800/90 rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-brand-500/30 dark:hover:border-volt-500/30 transition-all cursor-pointer select-none ${
-          opened ? 'opacity-65 dark:opacity-55' : 'opacity-100'
-        }`}
+        className="group relative bg-white dark:bg-ink-900 border border-cream-200/90 dark:border-ink-800/90 rounded-2xl p-3.5 sm:p-4 shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:shadow-md hover:border-brand-500/30 dark:hover:border-volt-500/30 transition-all cursor-pointer select-none"
       >
-        <div className="flex items-center gap-3.5 sm:gap-4">
+        <div className={`flex items-center gap-3.5 sm:gap-4 ${opened ? 'opacity-65 dark:opacity-55' : 'opacity-100'}`}>
           <div className="flex-1 min-w-0">
             {/* Source, Timestamp, Read Badge & Original Link */}
             <div className="flex items-center justify-between text-xs text-ink-500 dark:text-ink-400 mb-1.5">
