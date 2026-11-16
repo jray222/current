@@ -23,6 +23,7 @@ from app.services import crawler as crawler_service
 from app.services.crawl_schedule import crawl_scheduler
 from app.services import interest as interest_service
 from app.services import keys as key_service
+from app.services import prune as prune_service
 from app.services.images import get_image_absolute_path
 from app.services import llm as _llm  # noqa: F401
 
@@ -41,6 +42,8 @@ async def lifespan(_app: FastAPI):
         interest_service.migrate_models(db)
         # Reset any interrupted crawls from previous runs
         crawler_service.resume_pending_crawls(db)
+        # Purge stale articles on startup to keep the feed fresh
+        prune_service.prune_retention(db)
 
     crawl_scheduler.start()
     try:

@@ -229,3 +229,43 @@ def test_api_v1_prefixed_endpoints(make_user):
     res = client.get("/api/v1/kept")
     assert res.status_code == 200
 
+
+def test_source_sections_crud_and_filter(make_user):
+    client, _ = make_user("sections_user")
+
+    # Default section is 'news'
+    r1 = client.post("/api/v1/sources", json={"url": "https://apnews.com", "name": "AP News"})
+    assert r1.status_code == 201
+    assert r1.json()["section"] == "news"
+
+    # Explicit sections: tech, cars, shopping
+    r2 = client.post("/api/v1/sources", json={"url": "https://arstechnica.com", "name": "Ars", "section": "tech"})
+    assert r2.status_code == 201
+    assert r2.json()["section"] == "tech"
+
+    r3 = client.post("/api/v1/sources", json={"url": "https://caranddriver.com", "name": "C&D", "section": "cars"})
+    assert r3.status_code == 201
+    assert r3.json()["section"] == "cars"
+
+    r4 = client.post("/api/v1/sources", json={"url": "https://slickdeals.net", "name": "Slickdeals", "section": "shopping"})
+    assert r4.status_code == 201
+    assert r4.json()["section"] == "shopping"
+
+    # Invalid section rejected
+    r_bad = client.post("/api/v1/sources", json={"url": "https://other.com", "name": "Other", "section": "sports"})
+    assert r_bad.status_code == 422
+
+    # Unfiltered returns all 4
+    all_sources = client.get("/api/v1/sources").json()
+    assert len(all_sources) == 4
+
+    # Filtered returns matching section only
+    tech_sources = client.get("/api/v1/sources", params={"section": "tech"}).json()
+    assert [s["name"] for s in tech_sources] == ["Ars"]
+
+    # Update section via PATCH
+    r_patch = client.patch(f"/api/v1/sources/{r1.json()['id']}", json={"section": "tech"})
+    assert r_patch.status_code == 200
+    assert r_patch.json()["section"] == "tech"
+    assert len(client.get("/api/v1/sources", params={"section": "tech"}).json()) == 2
+

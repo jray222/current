@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Rss, RefreshCw, Globe, Code2, AlertTriangle, Trash2, Edit3, ExternalLink } from 'lucide-react';
 import { getSources, getCategories, crawlSource, crawlAll, deleteSource } from '../api';
+import { ALL_SECTIONS_TAB, SOURCE_SECTIONS, getSectionMeta } from '../lib/sections';
 import SourceSheet from '../components/SourceSheet';
 
 function formatRelativeTime(dateStr) {
@@ -21,12 +22,27 @@ function formatRelativeTime(dateStr) {
 export default function SourcesPage() {
   const [sources, setSources] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [selectedSection, setSelectedSection] = useState('');
   const [loading, setLoading] = useState(true);
   const [crawlingAll, setCrawlingAll] = useState(false);
   const [crawlingSourceId, setCrawlingSourceId] = useState(null);
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingSource, setEditingSource] = useState(null);
+
+  const sectionCounts = useMemo(() => {
+    const counts = { '': sources.length, news: 0, tech: 0, cars: 0, shopping: 0 };
+    for (const s of sources) {
+      const key = s.section || 'news';
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, [sources]);
+
+  const filteredSources = useMemo(() => {
+    if (!selectedSection) return sources;
+    return sources.filter((s) => (s.section || 'news') === selectedSection);
+  }, [sources, selectedSection]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -126,20 +142,53 @@ export default function SourcesPage() {
         </div>
       </div>
 
+      {/* Top-level Section Tabs (All, News, Tech, Cars, Shopping) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+        {[ALL_SECTIONS_TAB, ...SOURCE_SECTIONS].map((tab) => {
+          const Icon = tab.icon;
+          const active = selectedSection === tab.key;
+          const count = sectionCounts[tab.key] || 0;
+          return (
+            <button
+              key={tab.key || 'all'}
+              type="button"
+              onClick={() => setSelectedSection(tab.key)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                active
+                  ? 'bg-brand-700 text-white shadow-xs dark:bg-brand-600'
+                  : 'bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 text-ink-700 dark:text-ink-300 hover:bg-cream-100 dark:hover:bg-ink-800'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  active
+                    ? 'bg-white/20 text-white'
+                    : 'bg-cream-200 dark:bg-ink-800 text-ink-600 dark:text-ink-400'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Sources List */}
       {loading ? (
         <div className="py-20 text-center space-y-3">
           <RefreshCw className="w-6 h-6 animate-spin text-brand-600 dark:text-volt-400 mx-auto" />
           <p className="text-xs text-ink-500 dark:text-ink-400 font-medium">Loading sources...</p>
         </div>
-      ) : sources.length === 0 ? (
+      ) : filteredSources.length === 0 ? (
         <div className="bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 rounded-3xl p-8 sm:p-12 text-center max-w-md mx-auto my-12 shadow-xs space-y-4">
           <div className="w-16 h-16 rounded-3xl bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-volt-400 mx-auto flex items-center justify-center">
             <Rss className="w-8 h-8" />
           </div>
           <div className="space-y-1.5">
             <h2 className="font-serif font-bold text-2xl text-ink-900 dark:text-cream-100">
-              No sources configured
+              {selectedSection ? `No ${getSectionMeta(selectedSection).label} sources yet` : 'No sources configured'}
             </h2>
             <p className="text-xs sm:text-sm text-ink-600 dark:text-ink-400 leading-relaxed">
               Add URLs of websites, RSS feeds, or news publications. Current automatically detects feeds, respects robots.txt, and schedules periodic crawls.
@@ -147,14 +196,16 @@ export default function SourcesPage() {
           </div>
           <div>
             <button onClick={handleAdd} className="btn-primary inline-flex gap-2">
-              <Plus className="w-4 h-4" /> Add your first source
+              <Plus className="w-4 h-4" /> {selectedSection ? `Add ${getSectionMeta(selectedSection).label} source` : 'Add your first source'}
             </button>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {sources.map((src) => {
+          {filteredSources.map((src) => {
             const cat = categories.find((c) => c.id === src.category_id);
+            const secMeta = getSectionMeta(src.section);
+            const SecIcon = secMeta.icon;
             const isCrawling = crawlingSourceId === src.id || src.crawl_status === 'running';
 
             return (
@@ -163,7 +214,7 @@ export default function SourcesPage() {
                 className="bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 rounded-2xl p-4 shadow-xs flex flex-col justify-between space-y-3"
               >
                 <div>
-                  {/* Top Bar: Icon, Name, Category */}
+                  {/* Top Bar: Icon, Name, Section & Category */}
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       {src.favicon_url ? (
@@ -179,6 +230,10 @@ export default function SourcesPage() {
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/50 text-brand-700 dark:text-volt-400">
+                        <SecIcon className="w-2.5 h-2.5" />
+                        {secMeta.label}
+                      </span>
                       <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cream-100 dark:bg-ink-800 text-ink-600 dark:text-ink-300">
                         {cat ? cat.label : 'Keyword Auto'}
                       </span>
@@ -262,6 +317,7 @@ export default function SourcesPage() {
         onSaved={loadData}
         source={editingSource}
         categories={categories}
+        defaultSection={selectedSection || 'news'}
       />
     </div>
   );

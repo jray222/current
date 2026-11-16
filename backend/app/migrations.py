@@ -28,6 +28,9 @@ _REQUIRED_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "articles": [
         ("canonical_url", "VARCHAR(1000) NULL"),
     ],
+    "sources": [
+        ("section", "VARCHAR(20) DEFAULT 'news' NOT NULL"),
+    ],
     "users": [
         ("feed_preferences", "TEXT DEFAULT '{}'"),
     ],

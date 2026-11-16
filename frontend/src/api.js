@@ -223,9 +223,10 @@ export const updateAISettings = async (changes) => (await api.post('/settings/ai
 // --------------------------------------------------------------------------
 
 // Front page edition & category feeds
-export const getFrontpage = async () => (await api.get('/frontpage')).data;
-export const getFeed = async (category = '', limit = 30, offset = 0) =>
-  (await api.get('/feed', { params: { category: category || undefined, limit, offset } })).data;
+export const getFrontpage = async (section = '') =>
+  (await api.get('/frontpage', { params: { section: section || undefined } })).data;
+export const getFeed = async (category = '', limit = 30, offset = 0, section = '') =>
+  (await api.get('/feed', { params: { category: category || undefined, section: section || undefined, limit, offset } })).data;
 
 // Votes (keep / skip / open) & Undo
 export const postVote = async (articleId, verdict) =>
@@ -246,12 +247,14 @@ export const openArticleByUrl = async (payload) =>
   (await api.post('/articles/open-by-url', payload)).data;
 
 // Sources & Categories
-export const getCategories = async () => (await api.get('/categories')).data;
+export const getCategories = async (section = '') =>
+  (await api.get('/categories', { params: { section: section || undefined } })).data;
 export const createCategory = async (data) => (await api.post('/categories', data)).data;
 export const updateCategory = async (id, changes) => (await api.patch(`/categories/${id}`, changes)).data;
 export const deleteCategory = async (id) => (await api.delete(`/categories/${id}`)).data;
 
-export const getSources = async () => (await api.get('/sources')).data;
+export const getSources = async (section = '') =>
+  (await api.get('/sources', { params: { section: section || undefined } })).data;
 export const probeSource = async (url) => (await api.post('/sources/probe', { url })).data;
 export const createSource = async (data) => (await api.post('/sources', data)).data;
 export const updateSource = async (id, changes) => (await api.patch(`/sources/${id}`, changes)).data;

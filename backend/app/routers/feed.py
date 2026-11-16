@@ -11,10 +11,11 @@ from app.deps import get_current_user
 from app.models.user import User
 from app.models.news import Article, Category, Source, Vote
 from app.routers._scoping import get_owned_or_404
-from app.routers.sources import CategoryRead
+from app.routers.sources import CategoryRead, SectionLiteral
 from app.services import categories as category_service
 from app.services import interest
 from app.services import job_queue
+from app.services import prune as prune_service
 from app.services.job_queue import Priority
 
 router = APIRouter(tags=["feed"])
@@ -46,6 +47,7 @@ class FeedArticleItem(BaseModel):
     source_name: str
     source_host: str
     source_favicon: Optional[str]
+    source_section: str = "news"
     category_id: Optional[int]
     category_key: Optional[str]
     category_label: Optional[str]
@@ -133,6 +135,7 @@ def _group_stories_and_build_items(
                 source_name=src_name,
                 source_host=src_host,
                 source_favicon=src_fav,
+                source_section=(src.section or "news") if src else "news",
                 category_id=art.category_id,
                 category_key=cat.key if cat else "general",
                 category_label=cat.label if cat else "General",
@@ -155,6 +158,7 @@ def _group_stories_and_build_items(
 
 @router.get("/frontpage", response_model=FrontPageResponse)
 def get_frontpage(
+    section: Optional[SectionLiteral] = Query(None, description="Filter by top-level source section"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -207,13 +211,22 @@ def get_frontpage(
     )
     opened_ids = {row[0] for row in opened_rows}
 
-    # 3. Candidate unvoted articles for this household
-    articles = (
-        db.query(Article)
-        .filter(
-            Article.household_id == user.household_id,
-            ~Article.id.in_(triaged_ids),
+    # 3. Candidate unvoted fresh articles for this household
+    art_query = db.query(Article).filter(
+        Article.household_id == user.household_id,
+        ~Article.id.in_(triaged_ids),
+        prune_service.fresh_article_clause(),
+    )
+    if section:
+        section_source_ids = (
+            db.query(Source.id)
+            .filter(Source.household_id == user.household_id, Source.section == section)
+            .scalar_subquery()
         )
+        art_query = art_query.filter(Article.source_id.in_(section_source_ids))
+
+    articles = (
+        art_query
         .order_by(Article.discovered_at.desc())
         .limit(300)
         .all()
@@ -300,6 +313,7 @@ def get_frontpage(
 @router.get("/feed", response_model=list[FeedArticleItem])
 def get_category_feed(
     category: Optional[str] = Query(None, description="Category key"),
+    section: Optional[SectionLiteral] = Query(None, description="Filter by top-level source section"),
     limit: int = Query(30, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
@@ -318,7 +332,16 @@ def get_category_feed(
     query = db.query(Article).filter(
         Article.household_id == user.household_id,
         ~Article.id.in_(triaged_ids),
+        prune_service.fresh_article_clause(),
     )
+
+    if section:
+        section_source_ids = (
+            db.query(Source.id)
+            .filter(Source.household_id == user.household_id, Source.section == section)
+            .scalar_subquery()
+        )
+        query = query.filter(Article.source_id.in_(section_source_ids))
 
     target_cat_id = None
     if category and category != "top-stories":
@@ -532,6 +555,7 @@ def get_kept_articles(
             source_name=src.name if src else "Unknown",
             source_host=src.site_host if src else "",
             source_favicon=src.favicon_url if src else None,
+            source_section=(src.section or "news") if src else "news",
             category_id=art.category_id,
             category_key=cat.key if cat else "general",
             category_label=cat.label if cat else "General",

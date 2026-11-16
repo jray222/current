@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from app.database import SessionLocal
 from app.models.news import Article, Category, Source, Vote
 
@@ -243,4 +243,65 @@ def test_articles_open_by_url(make_user, monkeypatch):
     )
     assert res2.status_code == 200
     assert res2.json()["id"] == article_id
+
+
+def test_feed_section_filtering_and_one_day_freshness(make_user):
+    client, user = make_user("section_feed_user")
+    hid = user["household_id"]
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    with SessionLocal() as db:
+        cat_tech = db.query(Category).filter_by(household_id=hid, key="tech").first()
+        cat_general = db.query(Category).filter_by(household_id=hid, key="general").first()
+
+        s_news = Source(household_id=hid, url="https://news.example.com", name="News Daily", site_host="news.example.com", section="news")
+        s_tech = Source(household_id=hid, url="https://tech.example.com", name="Tech Wire", site_host="tech.example.com", section="tech", category_id=cat_tech.id)
+        s_cars = Source(household_id=hid, url="https://cars.example.com", name="Car Mag", site_host="cars.example.com", section="cars", category_id=cat_general.id)
+        s_shop = Source(household_id=hid, url="https://shop.example.com", name="Deal Hub", site_host="shop.example.com", section="shopping", category_id=cat_general.id)
+        db.add_all([s_news, s_tech, s_cars, s_shop])
+        db.flush()
+
+        a_news = Article(household_id=hid, source_id=s_news.id, category_id=cat_general.id, url="https://news.example.com/1", canonical_url="https://news.example.com/1", url_hash="sf-1", story_id="sf-s1", title="Fresh News Story", discovered_at=now - timedelta(hours=2))
+        a_tech = Article(household_id=hid, source_id=s_tech.id, category_id=cat_tech.id, url="https://tech.example.com/1", canonical_url="https://tech.example.com/1", url_hash="sf-2", story_id="sf-s2", title="Fresh Tech Story", discovered_at=now - timedelta(hours=2))
+        a_cars = Article(household_id=hid, source_id=s_cars.id, category_id=cat_general.id, url="https://cars.example.com/1", canonical_url="https://cars.example.com/1", url_hash="sf-3", story_id="sf-s3", title="Fresh Car Review", discovered_at=now - timedelta(hours=2))
+        a_shop = Article(household_id=hid, source_id=s_shop.id, category_id=cat_general.id, url="https://shop.example.com/1", canonical_url="https://shop.example.com/1", url_hash="sf-4", story_id="sf-s4", title="Fresh Deal Alert", discovered_at=now - timedelta(hours=2))
+        a_stale = Article(household_id=hid, source_id=s_tech.id, category_id=cat_tech.id, url="https://tech.example.com/old", canonical_url="https://tech.example.com/old", url_hash="sf-5", story_id="sf-s5", title="Stale Tech Story", published_at=now - timedelta(days=2), discovered_at=now)
+        db.add_all([a_news, a_tech, a_cars, a_shop, a_stale])
+        db.commit()
+
+    def _collect_titles(fp_json):
+        titles = []
+        if fp_json["lead_story"]:
+            titles.append(fp_json["lead_story"]["title"])
+        for sec in fp_json["sections"]:
+            titles.extend(a["title"] for a in sec["articles"])
+        return set(titles)
+
+    # Default (no section) includes all 4 fresh stories, excludes stale >1 day story
+    fp_all = client.get("/api/v1/frontpage").json()
+    all_titles = _collect_titles(fp_all)
+    assert all_titles == {"Fresh News Story", "Fresh Tech Story", "Fresh Car Review", "Fresh Deal Alert"}
+
+    # Tech section only
+    fp_tech = client.get("/api/v1/frontpage", params={"section": "tech"}).json()
+    assert _collect_titles(fp_tech) == {"Fresh Tech Story"}
+
+    # Cars section only
+    fp_cars = client.get("/api/v1/frontpage", params={"section": "cars"}).json()
+    assert _collect_titles(fp_cars) == {"Fresh Car Review"}
+
+    # Shopping section only
+    fp_shop = client.get("/api/v1/frontpage", params={"section": "shopping"}).json()
+    assert _collect_titles(fp_shop) == {"Fresh Deal Alert"}
+
+    # /feed with section=news
+    feed_news = client.get("/api/v1/feed", params={"section": "news"}).json()
+    assert [a["title"] for a in feed_news] == ["Fresh News Story"]
+
+    # /categories?section=tech scopes unread counts to Tech sources only
+    cats_tech = client.get("/api/v1/categories", params={"section": "tech"}).json()
+    tech_cat = next(c for c in cats_tech if c["key"] == "tech")
+    general_cat = next(c for c in cats_tech if c["key"] == "general")
+    assert tech_cat["unread_count"] == 1
+    assert general_cat["unread_count"] == 0
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from app.database import SessionLocal
 from app.models.news import Article, Category, CrawlRun, Source
@@ -9,6 +9,7 @@ from app.services.feeds import FeedEntry
 
 def test_crawl_source_rss(make_user, monkeypatch):
     client, user = make_user("crawler_user")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Mock feedparser results so test makes zero real outbound network calls
     mock_entries = [
@@ -17,7 +18,7 @@ def test_crawl_source_rss(make_user, monkeypatch):
             url="https://technews.example.com/item-1",
             summary="A coalition of labs released weights today.",
             author="Staff Writer",
-            published_at=datetime(2026, 11, 10, 12, 0, 0),
+            published_at=now - timedelta(hours=2),
             image_remote_url="https://technews.example.com/img1.jpg",
             tags=["AI", "Tech"],
         ),
@@ -26,7 +27,7 @@ def test_crawl_source_rss(make_user, monkeypatch):
             url="https://technews.example.com/item-2",
             summary="Indices gained 2 percent across the board.",
             author="Jane Doe",
-            published_at=datetime(2026, 11, 10, 13, 0, 0),
+            published_at=now - timedelta(hours=1),
             image_remote_url=None,
             tags=["Finance"],
         ),
@@ -151,6 +152,7 @@ def test_resume_pending_crawls(make_user):
 def test_cross_household_crawl_shares_scrape(make_user, monkeypatch):
     _, user_a = make_user("shared_crawl_a", "Household A")
     _, user_b = make_user("shared_crawl_b", "Household B")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     fetch_calls = 0
     mock_entries = [
@@ -159,7 +161,7 @@ def test_cross_household_crawl_shares_scrape(make_user, monkeypatch):
             url="https://shared.example.com/story-1",
             summary="Shared summary.",
             author="Reporter",
-            published_at=datetime(2026, 11, 10, 12, 0, 0),
+            published_at=now - timedelta(hours=2),
             image_remote_url=None,
             tags=["World"],
         )
@@ -211,3 +213,51 @@ def test_cross_household_crawl_shares_scrape(make_user, monkeypatch):
     # Explicit force=True bypasses the shared cache
     crawler.crawl_source(src_b_id, trigger="manual", force=True)
     assert fetch_calls == 2
+
+
+def test_crawl_skips_articles_older_than_one_day(make_user, monkeypatch):
+    _, user = make_user("fresh_crawler_user")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    mock_entries = [
+        FeedEntry(
+            title="Fresh Today Headline",
+            url="https://fresh.example.com/today",
+            summary="Happened just now.",
+            author="Reporter",
+            published_at=now - timedelta(hours=3),
+            image_remote_url=None,
+            tags=["News"],
+        ),
+        FeedEntry(
+            title="Stale Two-Day-Old Headline",
+            url="https://fresh.example.com/old",
+            summary="Happened two days ago.",
+            author="Reporter",
+            published_at=now - timedelta(days=2),
+            image_remote_url=None,
+            tags=["News"],
+        ),
+    ]
+
+    monkeypatch.setattr(crawler, "fetch_and_parse_feed", lambda url, **kwargs: ({}, mock_entries, url))
+
+    with SessionLocal() as db:
+        src = Source(
+            household_id=user["household_id"],
+            url="https://fresh.example.com",
+            name="Fresh Site",
+            site_host="fresh.example.com",
+            fetch_mode="rss",
+            feed_url="https://fresh.example.com/rss",
+        )
+        db.add(src)
+        db.commit()
+        source_id = src.id
+
+    crawler.crawl_source(source_id, trigger="manual")
+
+    with SessionLocal() as db:
+        articles = db.query(Article).filter_by(source_id=source_id).all()
+        assert len(articles) == 1
+        assert articles[0].title == "Fresh Today Headline"

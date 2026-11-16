@@ -1,86 +1,95 @@
-"""Data retention cleaner: purges stale unvoted articles, skipped articles,
+"""Data retention cleaner: purges stale articles older than retention window
 and old crawl run logs while permanently preserving kept reading list items.
 """
 from datetime import datetime, timedelta, timezone
 import logging
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from app.config import settings
 from app.models.news import Article, CrawlRun, Vote
 from app.services.images import delete_image
 
 logger = logging.getLogger("current.prune")
 
-RETENTION_DAYS_UNVOTED = 30
-RETENTION_DAYS_SKIPPED = 14
 RETENTION_DAYS_RUNS = 30
+_BATCH_SIZE = 500
+
+
+def retention_days() -> int:
+    """Returns configured article retention window in days (minimum 1)."""
+    return max(1, int(settings.RETENTION_DAYS or 1))
+
+
+def fresh_article_cutoff(now: Optional[datetime] = None) -> datetime:
+    """Returns the naive UTC cutoff timestamp for fresh (non-stale) articles."""
+    ref = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    return ref - timedelta(days=retention_days())
+
+
+def fresh_article_clause(now: Optional[datetime] = None):
+    """SQLAlchemy filter expression matching articles within the freshness window."""
+    cutoff = fresh_article_cutoff(now)
+    return (
+        (func.coalesce(Article.published_at, Article.discovered_at) >= cutoff)
+        & (Article.discovered_at >= cutoff)
+    )
 
 
 def prune_retention(db: Session) -> dict[str, int]:
     """Runs retention cleanup across articles, images, and crawl run logs."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    cutoff_unvoted = now - timedelta(days=RETENTION_DAYS_UNVOTED)
-    cutoff_skipped = now - timedelta(days=RETENTION_DAYS_SKIPPED)
+    cutoff_articles = now - timedelta(days=retention_days())
     cutoff_runs = now - timedelta(days=RETENTION_DAYS_RUNS)
 
-    # 1. Collect articles with a 'keep' vote (permanently protected)
+    # 1. Collect articles with an active 'keep' vote (permanently protected)
     kept_article_ids = (
         db.query(Vote.article_id)
-        .filter(Vote.verdict == "keep", Vote.article_id.isnot(None))
-        .scalar_subquery()
-    )
-
-    # 2. Collect articles with a 'skip' or 'dislike' vote older than 14 days
-    skipped_old_ids = (
-        db.query(Vote.article_id)
         .filter(
-            Vote.verdict.in_(["skip", "dislike"]),
-            Vote.created_at < cutoff_skipped,
+            Vote.verdict == "keep",
+            Vote.kept_state != "removed",
             Vote.article_id.isnot(None),
         )
         .scalar_subquery()
     )
 
-    # 3. Collect unvoted articles older than 30 days
-    any_voted_ids = (
-        db.query(Vote.article_id)
-        .filter(Vote.article_id.isnot(None))
-        .scalar_subquery()
-    )
-
-    # Find candidates to delete
-    to_delete = (
-        db.query(Article)
-        .filter(
-            ~Article.id.in_(kept_article_ids),
-            (
-                Article.id.in_(skipped_old_ids)
-                | (
-                    ~Article.id.in_(any_voted_ids)
-                    & (Article.discovered_at < cutoff_unvoted)
-                )
-            ),
-        )
-        .limit(500)
-        .all()
-    )
-
-    articles_pruned = len(to_delete)
-    for art in to_delete:
-        if art.thumb_path:
-            # Only unlink from disk if no other article references this thumbnail
-            other_ref = (
-                db.query(Article.id)
-                .filter(Article.thumb_path == art.thumb_path, Article.id != art.id)
-                .first()
+    # 2. Delete all non-kept articles older than the retention window (by published_at or discovered_at)
+    articles_pruned = 0
+    while True:
+        to_delete = (
+            db.query(Article)
+            .filter(
+                ~Article.id.in_(kept_article_ids),
+                (
+                    (func.coalesce(Article.published_at, Article.discovered_at) < cutoff_articles)
+                    | (Article.discovered_at < cutoff_articles)
+                ),
             )
-            if not other_ref:
-                delete_image(art.thumb_path)
-        db.delete(art)
+            .limit(_BATCH_SIZE)
+            .all()
+        )
+        if not to_delete:
+            break
 
-    db.commit()
+        for art in to_delete:
+            if art.thumb_path:
+                # Only unlink from disk if no other article references this thumbnail
+                other_ref = (
+                    db.query(Article.id)
+                    .filter(Article.thumb_path == art.thumb_path, Article.id != art.id)
+                    .first()
+                )
+                if not other_ref:
+                    delete_image(art.thumb_path)
+            db.delete(art)
 
-    # 4. Prune completed crawl runs older than 30 days
+        db.commit()
+        articles_pruned += len(to_delete)
+        if len(to_delete) < _BATCH_SIZE:
+            break
+
+    # 3. Prune completed crawl runs older than 30 days
     runs_deleted = (
         db.query(CrawlRun)
         .filter(

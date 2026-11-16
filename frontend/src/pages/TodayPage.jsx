@@ -11,6 +11,7 @@ import {
 } from '../api';
 import { navigate, onLinkClick } from '../lib/router';
 import { saveScrollPosition, restoreScrollPosition } from '../lib/scroll';
+import { ALL_SECTIONS_TAB, SOURCE_SECTIONS, getSectionMeta } from '../lib/sections';
 import CategoryNav from '../components/CategoryNav';
 import LeadStoryCard from '../components/LeadStoryCard';
 import CategorySection from '../components/CategorySection';
@@ -21,6 +22,7 @@ import ArticleActionSheet from '../components/ArticleActionSheet';
 
 export default function TodayPage() {
   const [categories, setCategories] = useState([]);
+  const [selectedSection, setSelectedSection] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [frontpage, setFrontpage] = useState(null);
   const [categoryArticles, setCategoryArticles] = useState([]);
@@ -47,12 +49,12 @@ export default function TodayPage() {
     new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
   );
 
-  const loadData = useCallback(async ({ silent = false } = {}) => {
+  const loadData = useCallback(async ({ silent = false, section = selectedSection } = {}) => {
     if (!silent) setLoading(true);
     try {
       const [catsRes, fpRes, settingsRes] = await Promise.all([
-        getCategories(),
-        getFrontpage(),
+        getCategories(section),
+        getFrontpage(section),
         getFeedSettings().catch(() => null),
       ]);
       setCategories(catsRes);
@@ -65,11 +67,11 @@ export default function TodayPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [selectedSection]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    loadData({ section: selectedSection });
+  }, [loadData, selectedSection]);
 
   // Restore scroll position after content finishes loading
   useEffect(() => {
@@ -85,7 +87,7 @@ export default function TodayPage() {
       return;
     }
     let cancelled = false;
-    getFeed(selectedCategory)
+    getFeed(selectedCategory, 30, 0, selectedSection)
       .then((items) => {
         if (!cancelled) setCategoryArticles(items);
       })
@@ -93,14 +95,24 @@ export default function TodayPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedCategory]);
+  }, [selectedCategory, selectedSection]);
+
+  const handleSelectSection = (nextSection) => {
+    if (nextSection === selectedSection) return;
+    setSelectedCategory('');
+    setSelectedSection(nextSection);
+  };
 
   const handleCrawlNow = async () => {
     setCrawling(true);
     try {
       await crawlAll();
       setTimeout(async () => {
-        await loadData();
+        await loadData({ section: selectedSection });
+        if (selectedCategory) {
+          const items = await getFeed(selectedCategory, 30, 0, selectedSection).catch(() => null);
+          if (items) setCategoryArticles(items);
+        }
         setCrawling(false);
       }, 1500);
     } catch {
@@ -183,11 +195,11 @@ export default function TodayPage() {
 
       if (verdict === 'dislike') {
         if (selectedCategory) {
-          getFeed(selectedCategory)
+          getFeed(selectedCategory, 30, 0, selectedSection)
             .then((items) => setCategoryArticles(items))
             .catch(() => {});
         } else {
-          loadData({ silent: true });
+          loadData({ silent: true, section: selectedSection });
         }
       }
     } catch (err) {
@@ -201,17 +213,27 @@ export default function TodayPage() {
     setUndoState(null);
     try {
       await undoVote(articleId);
-      await loadData();
+      await loadData({ section: selectedSection });
+      if (selectedCategory) {
+        const items = await getFeed(selectedCategory, 30, 0, selectedSection);
+        setCategoryArticles(items);
+      }
     } catch (err) {
       console.error('Failed to undo vote:', err);
     }
   };
 
-  // Nav categories filter out user exclusions
+  // Nav categories filter out user exclusions (and empty categories when scoped to a source section)
   const visibleNavCategories = useMemo(() => {
     const excluded = new Set(feedSettings.excluded_categories || []);
-    return categories.filter((c) => !excluded.has(c.key));
-  }, [categories, feedSettings.excluded_categories]);
+    return categories.filter((c) => {
+      if (excluded.has(c.key)) return false;
+      if (selectedSection && c.key !== selectedCategory && c.unread_count === 0) return false;
+      return true;
+    });
+  }, [categories, feedSettings.excluded_categories, selectedSection, selectedCategory]);
+
+  const activeSectionMeta = selectedSection ? getSectionMeta(selectedSection) : null;
 
   const hasContent = selectedCategory
     ? categoryArticles.length > 0
@@ -225,10 +247,12 @@ export default function TodayPage() {
           <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-brand-700 dark:text-volt-400">
             <span>{formattedDate}</span>
             <span>•</span>
-            <span className="text-ink-400 dark:text-ink-500 font-normal">Curated Edition</span>
+            <span className="text-ink-400 dark:text-ink-500 font-normal">
+              {activeSectionMeta ? `${activeSectionMeta.label} Sources` : 'Curated Edition'}
+            </span>
           </div>
           <h1 className="font-serif font-black text-3xl sm:text-5xl text-ink-950 dark:text-cream-50 tracking-tight mt-1">
-            Today’s Edition
+            {activeSectionMeta ? `${activeSectionMeta.label}` : 'Today’s Edition'}
           </h1>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
@@ -254,6 +278,35 @@ export default function TodayPage() {
         </div>
       </div>
 
+      {/* Top-Level Source Section Switcher (All / News / Tech / Cars / Shopping) */}
+      <div
+        role="tablist"
+        aria-label="Source sections"
+        className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-3 mb-2"
+      >
+        {[ALL_SECTIONS_TAB, ...SOURCE_SECTIONS].map((tab) => {
+          const Icon = tab.icon;
+          const active = selectedSection === tab.key;
+          return (
+            <button
+              key={tab.key || 'all'}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => handleSelectSection(tab.key)}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                active
+                  ? 'bg-ink-950 text-cream-50 dark:bg-volt-500 dark:text-ink-950 shadow-xs'
+                  : 'bg-white dark:bg-ink-900 border border-cream-200 dark:border-ink-800 text-ink-700 dark:text-ink-300 hover:bg-cream-100 dark:hover:bg-ink-800'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Sticky Category Ribbon (Sorted and filtered per user preferences) */}
       <CategoryNav
         categories={visibleNavCategories}
@@ -276,12 +329,23 @@ export default function TodayPage() {
               <CheckCircle2 className="w-8 h-8" />
             </div>
             <h2 className="font-serif font-bold text-2xl text-ink-900 dark:text-cream-100 mb-2">
-              You're all caught up!
+              {activeSectionMeta ? `No fresh ${activeSectionMeta.label} stories` : "You're all caught up!"}
             </h2>
             <p className="text-xs sm:text-sm text-ink-600 dark:text-ink-400 mb-6 leading-relaxed">
-              No unread stories remaining. Swipe on articles as you read to keep training your interest model, or crawl for new updates.
+              {activeSectionMeta
+                ? `No unread stories from the last 24 hours in ${activeSectionMeta.label}. Add ${activeSectionMeta.label} sources or switch back to All.`
+                : 'No unread stories remaining. Swipe on articles as you read to keep training your interest model, or crawl for new updates.'}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
+              {activeSectionMeta && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectSection('')}
+                  className="flex items-center gap-2 bg-ink-950 dark:bg-volt-500 text-cream-50 dark:text-ink-950 px-5 py-2.5 rounded-xl text-xs font-semibold shadow-xs transition-colors"
+                >
+                  <span>Back to All</span>
+                </button>
+              )}
               <button
                 onClick={handleCrawlNow}
                 disabled={crawling}

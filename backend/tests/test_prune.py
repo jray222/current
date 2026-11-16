@@ -20,7 +20,7 @@ def test_prune_retention_rules(make_user):
         db.add(src)
         db.flush()
 
-        # 1. Unvoted article 40 days old (SHOULD be pruned)
+        # 1. Unvoted article 2 days old (SHOULD be pruned)
         art_old_unvoted = Article(
             household_id=hid,
             source_id=src.id,
@@ -29,10 +29,10 @@ def test_prune_retention_rules(make_user):
             url_hash="h-unvoted",
             story_id="s1",
             title="Old Unvoted Article",
-            discovered_at=now - timedelta(days=40),
+            discovered_at=now - timedelta(days=2),
         )
 
-        # 2. Skipped article 20 days old (SHOULD be pruned)
+        # 2. Skipped article 2 days old (SHOULD be pruned)
         art_old_skipped = Article(
             household_id=hid,
             source_id=src.id,
@@ -41,10 +41,48 @@ def test_prune_retention_rules(make_user):
             url_hash="h-skipped",
             story_id="s2",
             title="Old Skipped Article",
-            discovered_at=now - timedelta(days=20),
+            discovered_at=now - timedelta(days=2),
         )
 
-        # 3. Kept article 50 days old (MUST BE PRESERVED)
+        # 3. Opened article 2 days old (SHOULD be pruned)
+        art_old_opened = Article(
+            household_id=hid,
+            source_id=src.id,
+            url="https://prune.site/old-opened",
+            canonical_url="https://prune.site/old-opened",
+            url_hash="h-opened",
+            story_id="s2b",
+            title="Old Opened Article",
+            discovered_at=now - timedelta(days=2),
+        )
+
+        # 4. Article discovered now, but published 2 days ago (SHOULD be pruned)
+        art_old_pub = Article(
+            household_id=hid,
+            source_id=src.id,
+            url="https://prune.site/old-pub",
+            canonical_url="https://prune.site/old-pub",
+            url_hash="h-old-pub",
+            story_id="s2c",
+            title="Old Published Article",
+            published_at=now - timedelta(days=2),
+            discovered_at=now,
+        )
+
+        # 5. Fresh unvoted article 12 hours old (MUST BE PRESERVED)
+        art_fresh = Article(
+            household_id=hid,
+            source_id=src.id,
+            url="https://prune.site/fresh",
+            canonical_url="https://prune.site/fresh",
+            url_hash="h-fresh",
+            story_id="s-fresh",
+            title="Fresh Article",
+            published_at=now - timedelta(hours=12),
+            discovered_at=now - timedelta(hours=12),
+        )
+
+        # 6. Kept article 50 days old (MUST BE PRESERVED)
         art_old_kept = Article(
             household_id=hid,
             source_id=src.id,
@@ -56,7 +94,7 @@ def test_prune_retention_rules(make_user):
             discovered_at=now - timedelta(days=50),
         )
 
-        db.add_all([art_old_unvoted, art_old_skipped, art_old_kept])
+        db.add_all([art_old_unvoted, art_old_skipped, art_old_opened, art_old_pub, art_fresh, art_old_kept])
         db.flush()
 
         # Add votes
@@ -68,7 +106,17 @@ def test_prune_retention_rules(make_user):
             verdict="skip",
             features_raw="{}",
             kept_state="removed",
-            created_at=now - timedelta(days=20),
+            created_at=now - timedelta(days=2),
+        )
+        vote_open = Vote(
+            user_id=user["id"],
+            household_id=hid,
+            article_id=art_old_opened.id,
+            story_id="s2b",
+            verdict="open",
+            features_raw="{}",
+            kept_state="removed",
+            created_at=now - timedelta(days=2),
         )
         vote_keep = Vote(
             user_id=user["id"],
@@ -80,9 +128,9 @@ def test_prune_retention_rules(make_user):
             kept_state="read",
             created_at=now - timedelta(days=50),
         )
-        db.add_all([vote_skip, vote_keep])
+        db.add_all([vote_skip, vote_open, vote_keep])
 
-        # 4. Old completed crawl run 35 days old (SHOULD be pruned)
+        # 7. Old completed crawl run 35 days old (SHOULD be pruned)
         run_old = CrawlRun(
             household_id=hid,
             source_id=src.id,
@@ -95,16 +143,22 @@ def test_prune_retention_rules(make_user):
         db.commit()
 
         kept_id = art_old_kept.id
+        fresh_id = art_fresh.id
         unvoted_id = art_old_unvoted.id
         skipped_id = art_old_skipped.id
+        opened_id = art_old_opened.id
+        old_pub_id = art_old_pub.id
 
     # Run prune
     with SessionLocal() as db:
         stats = prune_retention(db)
-        assert stats["pruned_articles"] == 2
+        assert stats["pruned_articles"] == 4
         assert stats["pruned_crawl_runs"] == 1
 
         # Check records
         assert db.get(Article, unvoted_id) is None
         assert db.get(Article, skipped_id) is None
-        assert db.get(Article, kept_id) is not None  # Preserved!
+        assert db.get(Article, opened_id) is None
+        assert db.get(Article, old_pub_id) is None
+        assert db.get(Article, fresh_id) is not None  # Fresh preserved!
+        assert db.get(Article, kept_id) is not None   # Kept preserved!

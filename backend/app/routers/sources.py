@@ -2,7 +2,7 @@ import re
 import time
 import urllib.parse
 from typing import Any, Optional, Literal
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -14,8 +14,11 @@ from app.models.news import Category, Source, Article, CrawlRun, Vote
 from app.routers._scoping import get_owned_or_404, ensure_category
 from app.services import categories as category_service
 from app.services import crawler as crawler_service
+from app.services import prune as prune_service
 
 router = APIRouter(tags=["sources"])
+
+SectionLiteral = Literal["news", "tech", "cars", "shopping"]
 
 
 # --------------------------------------------------------------------------
@@ -61,6 +64,7 @@ class SourceRead(BaseModel):
     name: str
     site_host: str
     favicon_url: Optional[str]
+    section: str = "news"
     fetch_mode: str
     feed_url: Optional[str]
     listing_url: Optional[str]
@@ -86,6 +90,7 @@ class SourceCreate(BaseModel):
     url: str = Field(..., min_length=1, max_length=1000)
     name: str = Field(..., min_length=1, max_length=200)
     favicon_url: Optional[str] = Field(None, max_length=1000)
+    section: SectionLiteral = "news"
     fetch_mode: Literal["rss", "html", "browser"] = "rss"
     feed_url: Optional[str] = Field(None, max_length=1000)
     listing_url: Optional[str] = Field(None, max_length=1000)
@@ -103,6 +108,7 @@ class SourceCreate(BaseModel):
 class SourceUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     favicon_url: Optional[str] = Field(None, max_length=1000)
+    section: Optional[SectionLiteral] = None
     fetch_mode: Optional[Literal["rss", "html", "browser"]] = None
     feed_url: Optional[str] = Field(None, max_length=1000)
     listing_url: Optional[str] = Field(None, max_length=1000)
@@ -115,6 +121,36 @@ class SourceUpdate(BaseModel):
     text_method: Optional[Literal["auto", "http", "browser"]] = None
     text_block_ads: Optional[int] = None
     text_selector: Optional[str] = Field(None, max_length=500)
+
+
+def _source_to_read(src: Source, article_count: int = 0) -> SourceRead:
+    return SourceRead(
+        id=src.id,
+        url=src.url,
+        name=src.name,
+        site_host=src.site_host,
+        favicon_url=src.favicon_url,
+        section=src.section or "news",
+        fetch_mode=src.fetch_mode,
+        feed_url=src.feed_url,
+        listing_url=src.listing_url,
+        link_pattern=src.link_pattern,
+        link_selector=src.link_selector,
+        category_id=src.category_id,
+        fetch_pages=src.fetch_pages,
+        enabled=src.enabled,
+        crawl_status=src.crawl_status,
+        last_crawl_at=src.last_crawl_at.isoformat() if src.last_crawl_at else None,
+        last_new_count=src.last_new_count,
+        last_error=src.last_error,
+        fail_streak=src.fail_streak,
+        text_when=src.text_when,
+        text_method=src.text_method,
+        text_block_ads=src.text_block_ads,
+        text_last_method=src.text_last_method,
+        text_selector=src.text_selector,
+        article_count=article_count,
+    )
 
 
 class CrawlRunRead(BaseModel):
@@ -141,6 +177,7 @@ class SourceProbePayload(BaseModel):
 
 @router.get("/categories", response_model=list[CategoryRead])
 def list_categories(
+    section: Optional[SectionLiteral] = Query(None, description="Filter unread counts by source section"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -172,16 +209,21 @@ def list_categories(
         .scalar_subquery()
     )
 
-    # Calculate unread counts per category for this user
-    counts = dict(
-        db.query(Article.category_id, func.count(Article.id))
-        .filter(
-            Article.household_id == user.household_id,
-            ~Article.id.in_(triaged_ids),
-        )
-        .group_by(Article.category_id)
-        .all()
+    # Calculate unread counts per category for this user (fresh articles only)
+    counts_query = db.query(Article.category_id, func.count(Article.id)).filter(
+        Article.household_id == user.household_id,
+        ~Article.id.in_(triaged_ids),
+        prune_service.fresh_article_clause(),
     )
+    if section:
+        section_source_ids = (
+            db.query(Source.id)
+            .filter(Source.household_id == user.household_id, Source.section == section)
+            .scalar_subquery()
+        )
+        counts_query = counts_query.filter(Article.source_id.in_(section_source_ids))
+
+    counts = dict(counts_query.group_by(Article.category_id).all())
 
     results = []
     for c in categories:
@@ -315,15 +357,14 @@ def delete_category(
 
 @router.get("/sources", response_model=list[SourceRead])
 def list_sources(
+    section: Optional[SectionLiteral] = Query(None, description="Filter sources by top-level section"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    sources = (
-        db.query(Source)
-        .filter(Source.household_id == user.household_id)
-        .order_by(Source.name.asc())
-        .all()
-    )
+    query = db.query(Source).filter(Source.household_id == user.household_id)
+    if section:
+        query = query.filter(Source.section == section)
+    sources = query.order_by(Source.name.asc()).all()
 
     counts = dict(
         db.query(Article.source_id, func.count(Article.id))
@@ -332,37 +373,7 @@ def list_sources(
         .all()
     )
 
-    results = []
-    for s in sources:
-        results.append(
-            SourceRead(
-                id=s.id,
-                url=s.url,
-                name=s.name,
-                site_host=s.site_host,
-                favicon_url=s.favicon_url,
-                fetch_mode=s.fetch_mode,
-                feed_url=s.feed_url,
-                listing_url=s.listing_url,
-                link_pattern=s.link_pattern,
-                link_selector=s.link_selector,
-                category_id=s.category_id,
-                fetch_pages=s.fetch_pages,
-                enabled=s.enabled,
-                crawl_status=s.crawl_status,
-                last_crawl_at=s.last_crawl_at.isoformat() if s.last_crawl_at else None,
-                last_new_count=s.last_new_count,
-                last_error=s.last_error,
-                fail_streak=s.fail_streak,
-                text_when=s.text_when,
-                text_method=s.text_method,
-                text_block_ads=s.text_block_ads,
-                text_last_method=s.text_last_method,
-                text_selector=s.text_selector,
-                article_count=counts.get(s.id, 0),
-            )
-        )
-    return results
+    return [_source_to_read(s, counts.get(s.id, 0)) for s in sources]
 
 
 @router.post("/sources", response_model=SourceRead, status_code=status.HTTP_201_CREATED)
@@ -401,6 +412,7 @@ def create_source(
         name=payload.name.strip(),
         site_host=site_host,
         favicon_url=payload.favicon_url,
+        section=payload.section,
         fetch_mode=payload.fetch_mode,
         feed_url=payload.feed_url,
         listing_url=payload.listing_url,
@@ -422,32 +434,7 @@ def create_source(
     db.commit()
     db.refresh(src)
 
-    return SourceRead(
-        id=src.id,
-        url=src.url,
-        name=src.name,
-        site_host=src.site_host,
-        favicon_url=src.favicon_url,
-        fetch_mode=src.fetch_mode,
-        feed_url=src.feed_url,
-        listing_url=src.listing_url,
-        link_pattern=src.link_pattern,
-        link_selector=src.link_selector,
-        category_id=src.category_id,
-        fetch_pages=src.fetch_pages,
-        enabled=src.enabled,
-        crawl_status=src.crawl_status,
-        last_crawl_at=None,
-        last_new_count=0,
-        last_error=None,
-        fail_streak=0,
-        text_when=src.text_when,
-        text_method=src.text_method,
-        text_block_ads=src.text_block_ads,
-        text_last_method=None,
-        text_selector=src.text_selector,
-        article_count=0,
-    )
+    return _source_to_read(src, 0)
 
 
 @router.patch("/sources/{id}", response_model=SourceRead)
@@ -467,6 +454,8 @@ def update_source(
         src.name = payload.name.strip()
     if payload.favicon_url is not None:
         src.favicon_url = payload.favicon_url
+    if payload.section is not None:
+        src.section = payload.section
     if payload.fetch_mode is not None:
         src.fetch_mode = payload.fetch_mode
     if payload.feed_url is not None:
@@ -500,32 +489,7 @@ def update_source(
         or 0
     )
 
-    return SourceRead(
-        id=src.id,
-        url=src.url,
-        name=src.name,
-        site_host=src.site_host,
-        favicon_url=src.favicon_url,
-        fetch_mode=src.fetch_mode,
-        feed_url=src.feed_url,
-        listing_url=src.listing_url,
-        link_pattern=src.link_pattern,
-        link_selector=src.link_selector,
-        category_id=src.category_id,
-        fetch_pages=src.fetch_pages,
-        enabled=src.enabled,
-        crawl_status=src.crawl_status,
-        last_crawl_at=src.last_crawl_at.isoformat() if src.last_crawl_at else None,
-        last_new_count=src.last_new_count,
-        last_error=src.last_error,
-        fail_streak=src.fail_streak,
-        text_when=src.text_when,
-        text_method=src.text_method,
-        text_block_ads=src.text_block_ads,
-        text_last_method=src.text_last_method,
-        text_selector=src.text_selector,
-        article_count=count,
-    )
+    return _source_to_read(src, count)
 
 
 @router.delete("/sources/{id}")

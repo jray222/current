@@ -125,7 +125,7 @@ class CrawlScheduler:
     def __init__(self) -> None:
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
-        self._last_prune_date: Optional[date] = None
+        self._last_prune_at: Optional[datetime] = None
 
     def start(self) -> None:
         if self._thread is not None or not settings.SCHEDULER_ENABLED:
@@ -146,15 +146,15 @@ class CrawlScheduler:
             except Exception as e:
                 logger.error(f"Error triggering scheduled crawl for household {hid}: {e}")
 
-        # Nightly maintenance check (run prune once per day)
-        check_now = now or _utcnow()
-        if self._last_prune_date != check_now.date():
+        # Hourly retention check to keep feed fresh (>1 day old unkept articles removed)
+        check_now = _naive_utc(now or _utcnow())
+        if self._last_prune_at is None or (check_now - self._last_prune_at) >= timedelta(hours=1):
             with SessionLocal() as db:
                 try:
                     prune.prune_retention(db)
-                    self._last_prune_date = check_now.date()
+                    self._last_prune_at = check_now
                 except Exception as e:
-                    logger.error(f"Nightly retention prune failed: {e}")
+                    logger.error(f"Retention prune failed: {e}")
 
         return household_ids
 

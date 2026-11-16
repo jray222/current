@@ -1,7 +1,7 @@
 """Core crawler engine: source probing, RSS/HTML/browser crawling, article ingestion,
 story clustering, and background job handling.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 import threading
 import time
@@ -10,6 +10,7 @@ import urllib.parse
 from typing import Optional, Any
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import SessionLocal
 from app.models.household import Household
 from app.models.news import Article, Category, CrawlRun, Source
@@ -138,6 +139,7 @@ def _ingest_entries(
     new_count = 0
     new_article_ids: list[int] = []
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now - timedelta(days=max(1, int(settings.RETENTION_DAYS or 1)))
 
     household_cats = (
         db.query(Category)
@@ -153,6 +155,13 @@ def _ingest_entries(
     for item in entries[:MAX_NEW_PER_SOURCE]:
         if not item.url or not item.title:
             continue
+
+        pub_dt = item.published_at
+        if pub_dt is not None:
+            if pub_dt.tzinfo is not None:
+                pub_dt = pub_dt.astimezone(timezone.utc).replace(tzinfo=None)
+            if pub_dt < cutoff:
+                continue
 
         c_url = canonical_url(item.url)
         h = url_hash(c_url)
@@ -171,7 +180,7 @@ def _ingest_entries(
             db,
             household_id=source.household_id,
             title=item.title,
-            reference_time=item.published_at or now,
+            reference_time=pub_dt or now,
         )
 
         # Category resolution
@@ -197,7 +206,7 @@ def _ingest_entries(
             title=item.title,
             summary=item.summary,
             author=item.author,
-            published_at=item.published_at,
+            published_at=pub_dt,
             discovered_at=now,
             image_remote_url=item.image_remote_url,
             lang="en",

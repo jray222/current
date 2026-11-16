@@ -49,6 +49,9 @@ class Category(Base):
         self.keywords_raw = json.dumps(val or [])
 
 
+SOURCE_SECTIONS = ("news", "tech", "cars", "shopping")
+
+
 class Source(Base):
     __tablename__ = "sources"
 
@@ -59,6 +62,7 @@ class Source(Base):
     site_host = Column(String(255), nullable=False, index=True)
     favicon_url = Column(String(1000), nullable=True)
 
+    section = Column(String(20), default="news", nullable=False, index=True)  # news | tech | cars | shopping
     fetch_mode = Column(String(20), default="rss", nullable=False)  # rss | html | browser
     feed_url = Column(String(1000), nullable=True)
     listing_url = Column(String(1000), nullable=True)

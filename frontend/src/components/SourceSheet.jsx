@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Globe, Rss, Code2, Loader2, Check, Sparkles } from 'lucide-react';
 import { probeSource, createSource, updateSource } from '../api';
+import { SOURCE_SECTIONS } from '../lib/sections';
 
 export default function SourceSheet({
   isOpen,
@@ -8,9 +9,11 @@ export default function SourceSheet({
   onSaved,
   source = null,
   categories = [],
+  defaultSection = 'news',
 }) {
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
+  const [section, setSection] = useState('news');
   const [fetchMode, setFetchMode] = useState('rss');
   const [feedUrl, setFeedUrl] = useState('');
   const [listingUrl, setListingUrl] = useState('');
@@ -27,6 +30,7 @@ export default function SourceSheet({
     if (source) {
       setUrl(source.url || '');
       setName(source.name || '');
+      setSection(source.section || 'news');
       setFetchMode(source.fetch_mode || 'rss');
       setFeedUrl(source.feed_url || '');
       setListingUrl(source.listing_url || '');
@@ -37,6 +41,7 @@ export default function SourceSheet({
     } else {
       setUrl('');
       setName('');
+      setSection(defaultSection || 'news');
       setFetchMode('rss');
       setFeedUrl('');
       setListingUrl('');
@@ -46,7 +51,7 @@ export default function SourceSheet({
       setProbeResult(null);
     }
     setError(null);
-  }, [source, isOpen]);
+  }, [source, isOpen, defaultSection]);
 
   if (!isOpen) return null;
 
@@ -77,6 +82,7 @@ export default function SourceSheet({
     const payload = {
       url: url.trim(),
       name: name.trim(),
+      section,
       fetch_mode: fetchMode,
       feed_url: feedUrl.trim() || null,
       listing_url: listingUrl.trim() || null,
@@ -178,6 +184,34 @@ export default function SourceSheet({
               placeholder="Hacker News"
               className="w-full bg-cream-50 dark:bg-ink-800 border border-cream-300 dark:border-ink-700 rounded-xl px-3.5 py-2 text-sm text-ink-900 dark:text-cream-100 focus:outline-hidden focus:ring-2 focus:ring-brand-500"
             />
+          </div>
+
+          {/* Top-level Source Section */}
+          <div>
+            <label className="block text-xs font-semibold text-ink-700 dark:text-ink-300 mb-1.5">
+              Top-Level Section
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {SOURCE_SECTIONS.map((sec) => {
+                const Icon = sec.icon;
+                const active = section === sec.key;
+                return (
+                  <button
+                    key={sec.key}
+                    type="button"
+                    onClick={() => setSection(sec.key)}
+                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-medium transition-all ${
+                      active
+                        ? 'border-brand-600 bg-brand-50/60 dark:bg-brand-950/40 text-brand-700 dark:text-volt-400 font-semibold'
+                        : 'border-cream-300 dark:border-ink-700 text-ink-600 dark:text-ink-400 hover:bg-cream-100 dark:hover:bg-ink-800'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 mb-1" />
+                    <span>{sec.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Category Picker */}

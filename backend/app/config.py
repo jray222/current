@@ -99,7 +99,7 @@ class Settings(BaseSettings):
     CRAWL_DELAY_SECONDS: float = 1.0
     MAX_NEW_PER_SOURCE: int = 25
     MAX_ARTICLE_PAGES: int = 5
-    RETENTION_DAYS: int = 14
+    RETENTION_DAYS: int = 1
     BROWSER_FETCH: bool = True
     ADBLOCK_EXTRA_HOSTS: str = ""
     ALLOW_PRIVATE_SOURCES: bool = False
