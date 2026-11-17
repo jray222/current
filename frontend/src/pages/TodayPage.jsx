@@ -10,7 +10,7 @@ import {
   getFeedSettings,
 } from '../api';
 import { navigate, onLinkClick } from '../lib/router';
-import { saveScrollPosition, restoreScrollPosition } from '../lib/scroll';
+import { saveScrollPosition, restoreScrollPosition, clearSavedScrollPosition } from '../lib/scroll';
 import { ALL_SECTIONS_TAB, SOURCE_SECTIONS, getSectionMeta } from '../lib/sections';
 import CategoryNav from '../components/CategoryNav';
 import LeadStoryCard from '../components/LeadStoryCard';
@@ -20,13 +20,44 @@ import UndoToast from '../components/UndoToast';
 import FeedCustomizeSheet from '../components/FeedCustomizeSheet';
 import ArticleActionSheet from '../components/ArticleActionSheet';
 
+const SECTION_STORAGE_KEY = 'current:today:section';
+const CATEGORY_STORAGE_KEY = 'current:today:category';
+const DEFAULT_SECTION = 'news';
+const VALID_SECTIONS = new Set(['', ...SOURCE_SECTIONS.map((s) => s.key)]);
+
+function readSessionValue(key, fallback) {
+  try {
+    const val = sessionStorage.getItem(key);
+    return val !== null ? val : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSessionValue(key, value) {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    // sessionStorage might be disabled or full
+  }
+}
+
 export default function TodayPage() {
   const [categories, setCategories] = useState([]);
-  const [selectedSection, setSelectedSection] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSection, setSelectedSection] = useState(() => {
+    const saved = readSessionValue(SECTION_STORAGE_KEY, DEFAULT_SECTION);
+    return VALID_SECTIONS.has(saved) ? saved : DEFAULT_SECTION;
+  });
+  const [selectedCategory, setSelectedCategory] = useState(() =>
+    readSessionValue(CATEGORY_STORAGE_KEY, '')
+  );
   const [frontpage, setFrontpage] = useState(null);
   const [categoryArticles, setCategoryArticles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [categoryLoading, setCategoryLoading] = useState(() =>
+    Boolean(readSessionValue(CATEGORY_STORAGE_KEY, ''))
+  );
+  const shouldRestoreScrollRef = useRef(true);
   const [crawling, setCrawling] = useState(false);
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [feedSettings, setFeedSettings] = useState({
@@ -73,34 +104,61 @@ export default function TodayPage() {
     loadData({ section: selectedSection });
   }, [loadData, selectedSection]);
 
-  // Restore scroll position after content finishes loading
   useEffect(() => {
-    if (!loading) {
-      restoreScrollPosition('/');
-    }
-  }, [loading]);
+    writeSessionValue(SECTION_STORAGE_KEY, selectedSection);
+  }, [selectedSection]);
+
+  useEffect(() => {
+    writeSessionValue(CATEGORY_STORAGE_KEY, selectedCategory);
+  }, [selectedCategory]);
 
   // When a specific category is selected, fetch that category's feed
   useEffect(() => {
     if (!selectedCategory) {
       setCategoryArticles([]);
+      setCategoryLoading(false);
       return;
     }
     let cancelled = false;
+    setCategoryLoading(true);
     getFeed(selectedCategory, 30, 0, selectedSection)
       .then((items) => {
         if (!cancelled) setCategoryArticles(items);
       })
-      .catch((err) => console.error(err));
+      .catch((err) => console.error(err))
+      .finally(() => {
+        if (!cancelled) setCategoryLoading(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [selectedCategory, selectedSection]);
 
+  const isViewLoading = loading || (Boolean(selectedCategory) && categoryLoading);
+
+  // Restore scroll position after initial/back-navigation content finishes loading
+  useEffect(() => {
+    if (!isViewLoading && shouldRestoreScrollRef.current) {
+      shouldRestoreScrollRef.current = false;
+      restoreScrollPosition('/');
+    }
+  }, [isViewLoading]);
+
   const handleSelectSection = (nextSection) => {
     if (nextSection === selectedSection) return;
+    shouldRestoreScrollRef.current = false;
+    clearSavedScrollPosition('/');
+    window.scrollTo({ top: 0 });
     setSelectedCategory('');
     setSelectedSection(nextSection);
+  };
+
+  const handleSelectCategory = (nextCategory) => {
+    if (nextCategory === selectedCategory) return;
+    shouldRestoreScrollRef.current = false;
+    clearSavedScrollPosition('/');
+    window.scrollTo({ top: 0 });
+    setSelectedCategory(nextCategory);
   };
 
   const handleCrawlNow = async () => {
@@ -278,13 +336,13 @@ export default function TodayPage() {
         </div>
       </div>
 
-      {/* Top-Level Source Section Switcher (All / News / Tech / Cars / Shopping) */}
+      {/* Top-Level Source Section Switcher (News / Tech / Cars / Shopping / All) */}
       <div
         role="tablist"
         aria-label="Source sections"
         className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-3 mb-2"
       >
-        {[ALL_SECTIONS_TAB, ...SOURCE_SECTIONS].map((tab) => {
+        {[...SOURCE_SECTIONS, ALL_SECTIONS_TAB].map((tab) => {
           const Icon = tab.icon;
           const active = selectedSection === tab.key;
           return (
@@ -311,12 +369,12 @@ export default function TodayPage() {
       <CategoryNav
         categories={visibleNavCategories}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={handleSelectCategory}
       />
 
       {/* Main Stream Area */}
       <div className="mt-6">
-        {loading ? (
+        {isViewLoading ? (
           <div className="py-20 text-center space-y-3">
             <RefreshCw className="w-6 h-6 animate-spin text-brand-600 dark:text-volt-400 mx-auto" />
             <p className="text-xs text-ink-500 dark:text-ink-400 font-medium">
@@ -413,7 +471,7 @@ export default function TodayPage() {
                 onLongPress={setActionArticle}
                 onOpenReader={handleOpenReader}
                 onOpenOriginal={handleOpenOriginal}
-                onSelectCategory={setSelectedCategory}
+                onSelectCategory={handleSelectCategory}
                 previewLines={feedSettings.preview_lines}
                 openedArticleIds={openedArticleIds}
               />
