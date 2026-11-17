@@ -67,6 +67,21 @@ BOILERPLATE_PHRASES = [
     "download our app",
 ]
 
+# Unambiguous cookie-consent / CMP modal phrases that should be stripped regardless of length
+CONSENT_BOILERPLATE_PHRASES = [
+    "manage your consent preferences",
+    "confirm my choices",
+    "allow targeted advertising",
+    "these cookies are necessary for the website to function",
+    "these cookies allow us to count visits and traffic sources",
+    "we use audience measurement cookies",
+    "this website uses functional cookies",
+    "these cookies are set by a range of social media services",
+    "allow sale/targeted advertising",
+    "we may transfer or share your personal information to third parties for the purposes of targeted advertising",
+    "you can set your browser to block or alert you about these cookies",
+]
+
 
 def is_ad_host(host_or_url: str) -> bool:
     """Returns True if the host or URL belongs to a known ad/tracking network."""
@@ -95,8 +110,11 @@ def is_ad_host(host_or_url: str) -> bool:
 
 
 def is_boilerplate_text(text: str) -> bool:
-    """Returns True if a short paragraph or text block is likely a generic call-to-action or boilerplate."""
+    """Returns True if a text block is likely a generic call-to-action, cookie consent notice, or boilerplate."""
     lower = text.strip().lower()
+    for phrase in CONSENT_BOILERPLATE_PHRASES:
+        if phrase in lower:
+            return True
     if len(lower) < 150:
         for phrase in BOILERPLATE_PHRASES:
             if phrase in lower:

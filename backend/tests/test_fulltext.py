@@ -292,3 +292,61 @@ def test_cross_household_fulltext_reuse(make_user, monkeypatch):
     assert client_b.get(f"/articles/{art_a_id}").status_code == 404
 
 
+def test_strip_onetrust_cookie_consent_from_html():
+    html = """<!DOCTYPE html>
+<html>
+<body>
+  <article>
+    <h2>New Chip Architecture Announced</h2>
+    <p>Engineers unveiled a new low-power processor design aimed at edge devices.</p>
+    <p>Early benchmarks show a 30 percent improvement in efficiency over prior generations.</p>
+    <p>Shipping hardware is expected to reach developers later this year.</p>
+  </article>
+  <div id="onetrust-consent-sdk">
+    <h3>Manage your consent preferences</h3>
+    <p>If you are a resident of Colorado, Connecticut, Virginia, Utah, Oregon, Texas, Montana, Delaware, Iowa, Nebraska, New Hampshire, and New Jersey, Tennessee, Minnesota, Maryland, Indiana, Kentucky, or Rhode Island you have the right to opt-out of Targeted Advertising.</p>
+    <h4>Performance</h4>
+    <p>On</p>
+    <p>These cookies allow us to count visits and traffic sources so we can measure and improve the performance of our site.</p>
+  </div>
+</body>
+</html>
+"""
+    blocks = to_blocks_from_html(html)
+    joined = " ".join(b.get("x", "") for b in blocks)
+    assert "low-power processor design" in joined
+    assert "Manage your consent preferences" not in joined
+    assert "Targeted Advertising" not in joined
+    assert "count visits and traffic sources" not in joined
+
+
+def test_clean_blocks_strips_long_consent_boilerplate():
+    raw_blocks = [
+        {"t": "p", "x": "Scientists measured unexpected magnetic fields near the crater rim."},
+        {"t": "h2", "x": "Manage your consent preferences"},
+        {
+            "t": "p",
+            "x": "If you are a resident of Colorado, Connecticut, Virginia, Utah, Oregon, Texas, Montana, Delaware, Iowa, Nebraska, New Hampshire, and New Jersey, Tennessee, Minnesota, Maryland, Indiana, Kentucky, or Rhode Island you have the right to opt-out of Targeted Advertising, including our “sale” and/or “sharing” of your Personal Information (“Opt-Out”). Move the “Allow Targeted Advertising\" toggle below to the left and press “Confirm My Choices”.",
+        },
+        {
+            "t": "p",
+            "x": "These cookies are necessary for the website to function and cannot be switched off in our systems. They are usually only set in response to actions made by you which amount to a request for services.",
+        },
+        {
+            "t": "p",
+            "x": "We use audience measurement cookies in order to carry out aggregated traffic measurement and generate performance statistics essential for the proper functioning of the site.",
+        },
+        {
+            "t": "p",
+            "x": "We may transfer or share your personal information to third parties for the purposes of targeted advertising. You can learn more about what information is used for this purpose in our privacy notice.",
+        },
+        {"t": "p", "x": "Follow-up observations are scheduled for next spring."},
+    ]
+    cleaned = clean_blocks(raw_blocks)
+    assert [b["x"] for b in cleaned] == [
+        "Scientists measured unexpected magnetic fields near the crater rim.",
+        "Follow-up observations are scheduled for next spring.",
+    ]
+
+
+

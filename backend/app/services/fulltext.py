@@ -174,6 +174,43 @@ def extract_collection_stories(html_text: str, base_url: str) -> list[dict[str, 
     return stories
 
 
+_CMP_XPATH = (
+    "//*["
+    "@id='onetrust-consent-sdk' or @id='onetrust-banner-sdk' or @id='onetrust-pc-sdk' "
+    "or contains(@class, 'onetrust-pc-dark-filter') "
+    "or @id='CybotCookiebotDialog' or @id='CookiebotWidget' "
+    "or @id='qc-cmp2-container' or contains(@class, 'qc-cmp2-container') "
+    "or @id='didomi-host' or @id='didomi-popup' "
+    "or @id='truste-consent-track' or @id='consent_blackbar' or contains(@class, 'truste_box_overlay') "
+    "or starts-with(@id, 'sp_message_container') or contains(@class, 'sp_message_container') "
+    "or @id='usercentrics-root' "
+    "or ((self::div or self::section or self::aside or self::dialog) and ("
+    "contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie-banner') "
+    "or contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie-consent') "
+    "or contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie-banner') "
+    "or contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie-consent') "
+    "or contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'consent-banner')"
+    "))"
+    "]"
+)
+
+
+def _strip_cmp_elements(html_text: str) -> str:
+    """Removes known cookie-consent / CMP overlay nodes before article extraction."""
+    try:
+        doc = lxml_html.fromstring(html_text)
+        cmp_nodes = doc.xpath(_CMP_XPATH)
+        if not cmp_nodes:
+            return html_text
+        for node in cmp_nodes:
+            parent = node.getparent()
+            if parent is not None:
+                parent.remove(node)
+        return lxml_html.tostring(doc, encoding="unicode")
+    except Exception:
+        return html_text
+
+
 def to_blocks_from_html(
     html_text: str,
     custom_selector: Optional[str] = None,
@@ -183,6 +220,7 @@ def to_blocks_from_html(
     if not html_text:
         return []
 
+    html_text = _strip_cmp_elements(html_text)
     blocks: list[dict[str, Any]] = []
 
     # 1. Trafilatura XML extraction
